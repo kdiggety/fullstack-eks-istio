@@ -1,0 +1,30 @@
+name: backend-ci
+on:
+  pull_request:
+    paths: ["backend/**"]
+  push:
+    branches: [main]
+    paths: ["backend/**"]
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        run: npm ci
+        working-directory: backend
+      - name: Test
+        run: npm test -- --ci
+        working-directory: backend
+      - name: Build image
+        run: |
+          # TODO: docker build -t <ECR_OR_DOCKERHUB>/sample-api:${{ github.sha }} .
+        working-directory: backend
+      - name: Push image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # TODO: login to ECR/DockerHub, push image tag ${{ github.sha }}
+        working-directory: backend

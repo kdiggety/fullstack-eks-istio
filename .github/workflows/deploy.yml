@@ -1,0 +1,36 @@
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy"
+        required: true
+  push:
+    tags: ["v*.*.*"]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/<GH_OIDC_ROLE> # TODO
+          aws-region: <REGION>
+      - name: Update kubeconfig
+        run: |
+          # TODO: aws eks update-kubeconfig --name <EKS_CLUSTER_NAME> --region <REGION>
+      - name: Patch image tags and apply
+        run: |
+          # TODO: yq -i '.spec.template.spec.containers[0].image = "<ECR_OR_DOCKERHUB>/sample-api:${{ inputs.tag }}"' k8s/backend-deployment.yaml
+          # TODO: yq -i '.spec.template.spec.containers[0].image = "<ECR_OR_DOCKERHUB>/sample-frontend:${{ inputs.tag }}"' k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/backend-service.yaml
+          kubectl apply -f k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/frontend-service.yaml
+          kubectl apply -f k8s/istio/gateway.yaml
+          kubectl apply -f k8s/istio/virtualservice.yaml
