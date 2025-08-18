@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: api
-          image: <ECR_OR_DOCKERHUB>/sample-api:<TAG>
+          image: sample-backend:dev
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           readinessProbe:
