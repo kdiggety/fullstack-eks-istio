@@ -1,0 +1,11 @@
+name: selfhosted-smoke
+
+on:
+  workflow_dispatch:   # lets you run it manually from the Actions tab
+
+jobs:
+  hello:
+    runs-on: [self-hosted, local-k8s]   # your runner labels
+    steps:
+      - run: echo "Hello from $(uname -a)"
+      - run: kubectl version --short || echo "kubectl not found"

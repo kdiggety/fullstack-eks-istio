@@ -15,6 +15,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: <ECR_OR_DOCKERHUB>/sample-frontend:<TAG>
+          image: sample-frontend:dev
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

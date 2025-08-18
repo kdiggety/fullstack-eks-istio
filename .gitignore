@@ -37,3 +37,6 @@ crash.log
 
 # Local kube configs
 .kube/
+
+# Ignore GitHub Actions self-hosted runner binaries/config
+actions-runner/
