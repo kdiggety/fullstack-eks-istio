@@ -3,20 +3,21 @@ import { greet } from "./api";
 
 export default function App() {
     const useLocalStorage = (key, initialValue) => {
-        // Get value from local storage, or initialize the value
-        const localStorageValue = localStorage.getItem(key);
-        const currentKeyValue = localStorageValue !== undefined ? JSON.parse(localStorageValue) : initialValue;
-
         // Create the state variables
-        const [keyStateValue, setKeyStateValue] = useState(currentKeyValue);
+        const [value, setValue] = useState(() => {
+        	// Get value from local storage, or initialize the value
+        	const localStorageValue = localStorage.getItem(key);
+        	return localStorageValue !== undefined ? JSON.parse(localStorageValue) : initialValue;
+
+	});
 
         // Create the hooks to update the local storage when the value changes
         useEffect(() => {
-            localStorage.setItem(key, JSON.stringify(keyStateValue));
-        }, [keyStateValue, setKeyStateValue]);
+            localStorage.setItem(key, JSON.stringify(value));
+        }, [key, value]);
 
         // Return the state variables
-        return [keyStateValue, setKeyStateValue];
+        return [value, setValue];
     }
 
     const [name, setName] = useLocalStorage("name", "World");
