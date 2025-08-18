@@ -59,6 +59,32 @@ jobs:
           kubectl -n $NAMESPACE apply -f k8s/backend-deployment.yaml || true
           kubectl -n $NAMESPACE apply -f k8s/frontend-deployment.yaml || true
 
+      # Ensure Images exist locally and load into Cluster
+      - name: Ensure Images exist locally and load into Cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.vars.outputs.TAG }}"
+          if ! docker image inspect "sample-api:$TAG" >/dev/null 2>&1; then
+            echo "sample-api:$TAG missing; building…"
+            docker build -t "sample-api:$TAG" "${{ github.workspace }}/backend"
+          fi
+          if ! docker image inspect "sample-frontend:$TAG" >/dev/null 2>&1; then
+            echo "sample-frontend:$TAG missing; building…"
+            docker build -t "sample-frontend:$TAG" "${{ github.workspace }}/frontend"
+          fi
+          if command -v minikube >/dev/null 2>&1; then
+            echo "Detected minikube: loading images"
+            minikube image load "sample-api:$TAG"
+            minikube image load "sample-frontend:$TAG"
+          elif command -v kind >/dev/null 2>&1; then
+            echo "Detected kind: loading images"
+            kind load docker-image "sample-api:$TAG"
+            kind load docker-image "sample-frontend:$TAG"
+          else
+            echo "Assuming Docker Desktop Kubernetes: images are already visible to the cluster"
+          fi
+
       # Set images to the tag produced in CI (or provided manually)
       - name: Update Deployment images
         run: |
