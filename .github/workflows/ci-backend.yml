@@ -9,25 +9,25 @@ on:
 
 jobs:
   test-and-build:
-    # For local images that persist, run on your self-hosted runner.
-    # If you want CI in the cloud and only local deploys, change to ubuntu-latest.
     runs-on: [self-hosted, local-k8s]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: "${{ github.workspace }}/backend/package-lock.json"
 
       - name: Install deps
         run: npm ci
-        working-directory: backend
+        working-directory: "${{ github.workspace }}/backend"
 
       - name: Test
         run: npm test -- --ci
-        working-directory: backend
+        working-directory: "${{ github.workspace }}/backend"
 
       - name: Compute image tag
         id: vars
@@ -36,15 +36,16 @@ jobs:
 
       - name: Build local Docker image
         run: |
-          docker build -t sample-api:${{ steps.vars.outputs.TAG }} backend
+          docker build -t "sample-api:${{ steps.vars.outputs.TAG }}" "${{ github.workspace }}/backend"
 
       - name: Load image into minikube (if present)
+        shell: bash
         run: |
           if command -v minikube >/dev/null 2>&1; then
-            minikube image load sample-api:${{ steps.vars.outputs.TAG }}
+            minikube image load "sample-api:${{ steps.vars.outputs.TAG }}"
           else
             echo "Docker Desktop detected (no image load needed)"
           fi
 
       - name: Show built image
-        run: docker images | grep sample-api
+        run: docker images | grep sample-api || true

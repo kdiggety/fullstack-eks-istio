@@ -11,21 +11,23 @@ jobs:
   build:
     runs-on: [self-hosted, local-k8s]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: "${{ github.workspace }}/frontend/package-lock.json"
 
       - name: Install deps
         run: npm ci
-        working-directory: frontend
+        working-directory: "${{ github.workspace }}/frontend"
 
       - name: Build (Vite)
         run: npm run build
-        working-directory: frontend
+        working-directory: "${{ github.workspace }}/frontend"
 
       - name: Compute image tag
         id: vars
@@ -34,15 +36,16 @@ jobs:
 
       - name: Build local Docker image
         run: |
-          docker build -t sample-frontend:${{ steps.vars.outputs.TAG }} frontend
+          docker build -t "sample-frontend:${{ steps.vars.outputs.TAG }}" "${{ github.workspace }}/frontend"
 
       - name: Load image into minikube (if present)
+        shell: bash
         run: |
           if command -v minikube >/dev/null 2>&1; then
-            minikube image load sample-frontend:${{ steps.vars.outputs.TAG }}
+            minikube image load "sample-frontend:${{ steps.vars.outputs.TAG }}"
           else
             echo "Docker Desktop detected (no image load needed)"
           fi
 
       - name: Show built image
-        run: docker images | grep sample-frontend
+        run: docker images | grep sample-frontend || true
