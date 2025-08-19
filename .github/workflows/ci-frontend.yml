@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
     paths: ["frontend/**"]
+    tags: ['v*.*.*']   # ← build on releases too
 
 jobs:
   build:
@@ -32,19 +33,29 @@ jobs:
       - name: Compute image tag
         id: vars
         shell: bash
-        run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Build local Docker image
         run: |
-          docker build -t "sample-frontend:${{ steps.vars.outputs.TAG }}" "${{ github.workspace }}/frontend"
+          echo "SHA_TAG=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "RELEASE_TAG=" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Load image into minikube (if present)
+      - name: Build local Docker image (SHA tag)
+        run: docker build -t "sample-frontend:${{ steps.vars.outputs.SHA_TAG }}" "${{ github.workspace }}/frontend"
+
+      - name: Also tag image with release tag (if present)
+        if: ${{ steps.vars.outputs.RELEASE_TAG != '' }}
+        run: docker tag "sample-frontend:${{ steps.vars.outputs.SHA_TAG }}" "sample-frontend:${{ steps.vars.outputs.RELEASE_TAG }}"
+
+      - name: Load images into minikube (if present)
         shell: bash
         run: |
           if command -v minikube >/dev/null 2>&1; then
-            minikube image load "sample-frontend:${{ steps.vars.outputs.TAG }}"
-          else
-            echo "Docker Desktop detected (no image load needed)"
+            minikube image load "sample-frontend:${{ steps.vars.outputs.SHA_TAG }}"
+            if [ -n "${{ steps.vars.outputs.RELEASE_TAG }}" ]; then
+              minikube image load "sample-frontend:${{ steps.vars.outputs.RELEASE_TAG }}"
+            fi
           fi
 
       - name: Show built image
