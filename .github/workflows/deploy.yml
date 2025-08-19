@@ -3,10 +3,11 @@ name: Deploy Local K8s
 on:
   push:
     branches: [ main ]
+    tags: ['v*.*.*']     # ← also deploy on release tags
   workflow_dispatch:
     inputs:
       tag:
-        description: "Optional image tag (defaults to commit short SHA)"
+        description: "Optional image tag override (e.g., v0.1.0)"
         required: false
 
 concurrency:
@@ -22,45 +23,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Compute image tag
+      - name: Resolve image tag
         id: vars
         shell: bash
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.tag || '' }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
           else
             TAG="${GITHUB_SHA::7}"
           fi
-          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Using tag: $TAG"
+          printf 'TAG=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using image tag: $TAG"
 
-      - name: Show cluster context
-        run: |
-          kubectl config current-context
-          kubectl get nodes
-
-      - name: Ensure namespace & sidecar injection label
-        run: |
-          kubectl get ns $NAMESPACE || kubectl create ns $NAMESPACE
-          kubectl label ns $NAMESPACE istio-injection=enabled --overwrite
-
-      # Apply base services and Istio routing first (safe to re-apply)
-      - name: Apply Services and Istio Gateway/VirtualService
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl -n $NAMESPACE apply -f k8s/backend-service.yaml
-          kubectl -n $NAMESPACE apply -f k8s/frontend-service.yaml
-          kubectl -n $NAMESPACE apply -f k8s/istio/gateway.yaml
-          kubectl -n $NAMESPACE apply -f k8s/istio/virtualservice.yaml
-
-      # Ensure Deployments exist (first run) – ignore non-zero if already applied
-      - name: Apply Deployments (idempotent)
-        run: |
-          kubectl -n $NAMESPACE apply -f k8s/backend-deployment.yaml || true
-          kubectl -n $NAMESPACE apply -f k8s/frontend-deployment.yaml || true
-
-      # Ensure Images exist locally and load into Cluster
-      - name: Ensure Images exist locally and load into Cluster
+      # (optional but recommended) ensure images exist locally and load to cluster if needed
+      - name: Ensure images exist locally and load into cluster
         shell: bash
         run: |
           set -euo pipefail
@@ -85,50 +64,55 @@ jobs:
             echo "Assuming Docker Desktop Kubernetes: images are already visible to the cluster"
           fi
 
-      # Set images to the tag produced in CI (or provided manually)
-      - name: Update Deployment images
-        run: |
-          kubectl -n $NAMESPACE set image deploy/api api=sample-api:${{ steps.vars.outputs.TAG }}
-          kubectl -n $NAMESPACE set image deploy/web web=sample-frontend:${{ steps.vars.outputs.TAG }}
-
-      - name: Wait for rollouts
-        run: |
-          kubectl -n $NAMESPACE rollout status deploy/api --timeout=180s
-          kubectl -n $NAMESPACE rollout status deploy/web --timeout=180s
-          kubectl -n $NAMESPACE get pods -o wide
-
-      - name: Smoke test via Istio ingress (port-forward)
+      - name: Ensure namespace & sidecar injection
         shell: bash
         run: |
           set -euo pipefail
+          kubectl get ns "$NAMESPACE" || kubectl create ns "$NAMESPACE"
+          kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-          # Show ingress svc
+      - name: Apply Services and Istio routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl apply -f k8s/namespace.yaml
+          kubectl -n "$NAMESPACE" apply -f k8s/backend-service.yaml
+          kubectl -n "$NAMESPACE" apply -f k8s/frontend-service.yaml
+          kubectl -n "$NAMESPACE" apply -f k8s/istio/gateway.yaml
+          kubectl -n "$NAMESPACE" apply -f k8s/istio/virtualservice.yaml
+
+      - name: Ensure Deployments exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" apply -f k8s/backend-deployment.yaml || true
+          kubectl -n "$NAMESPACE" apply -f k8s/frontend-deployment.yaml || true
+
+      - name: Update images to resolved TAG
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" set image deploy/api api="sample-api:${{ steps.vars.outputs.TAG }}"
+          kubectl -n "$NAMESPACE" set image deploy/web web="sample-frontend:${{ steps.vars.outputs.TAG }}"
+
+      - name: Wait for rollouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s
+          kubectl -n "$NAMESPACE" get pods -o wide
+
+      - name: Smoke test through Istio
+        shell: bash
+        run: |
+          set -euo pipefail
           kubectl -n istio-system get svc istio-ingressgateway
-
-          # Port-forward in the background
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
-          # wait a moment for the forward to bind
-          for i in {1..10}; do nc -z localhost 8080 && break || sleep 1; done
-
+          sleep 3
           echo "== /api/health =="
           curl -fsS http://localhost:8080/api/health | tee /tmp/health.json
-
-          echo "== / (frontend first 10 lines) =="
+          echo "== / (frontend, first 10) =="
           curl -fsS http://localhost:8080/ | head -n 10
-
-          # Cleanup port-forward
-          kill $PF_PID || true
-
-      # Optional: helpful diagnostics if something breaks
-      - name: If failed, dump some diagnostics
-        if: failure()
-        run: |
-          echo "---- Pods ----"
-          kubectl -n $NAMESPACE get pods -o wide
-          echo "---- Events ----"
-          kubectl -n $NAMESPACE get events --sort-by=.lastTimestamp | tail -n 100
-          echo "---- API logs ----"
-          kubectl -n $NAMESPACE logs deploy/api -c api --tail=200 || true
-          echo "---- WEB logs ----"
-          kubectl -n $NAMESPACE logs deploy/web -c web --tail=200 || true
+          kill "$PF_PID" || true
