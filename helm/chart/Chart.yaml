@@ -1,0 +1,17 @@
+apiVersion: v2
+name: fullstack
+description: Umbrella chart for api + web + istio
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: api
+    version: 0.1.0
+    repository: "file://../chart-api"
+  - name: web
+    version: 0.1.0
+    repository: "file://../chart-web"
+  - name: istio
+    version: 0.1.0
+    repository: "file://../chart-istio"

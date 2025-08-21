@@ -1,0 +1,14 @@
+replicaCount: 1
+
+image:
+  repository: sample-api
+  tag: dev
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80        # cluster service port; routes to containerPort
+
+# Probes and container port
+readinessPath: /api/health
+livenessPath: /api/health
+containerPort: 3000
