@@ -1,9 +1,9 @@
-name: Deploy Local K8s
+name: Deploy Local K8s (Umbrella Helm)
 
 on:
   push:
     branches: [ main ]
-    tags: ['v*.*.*']     # ← also deploy on release tags
+    tags: [ 'v*.*.*' ]   # deploy on release tags too
   workflow_dispatch:
     inputs:
       tag:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, local-k8s]  # must match your runner's labels
+    runs-on: [self-hosted, local-k8s]   # must match your runner's labels
     env:
       NAMESPACE: sample
     steps:
@@ -31,19 +31,27 @@ jobs:
           if [ -n "${{ github.event.inputs.tag || '' }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
+            TAG="${GITHUB_REF_NAME}"     # deploy the release tag (e.g., v0.1.0)
           else
-            TAG="${GITHUB_SHA::7}"
+            TAG="${GITHUB_SHA::7}"       # fallback to short SHA
           fi
           printf 'TAG=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
           echo "Using image tag: $TAG"
 
-      # (optional but recommended) ensure images exist locally and load to cluster if needed
+      - name: Show cluster context
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl config current-context
+          kubectl get nodes
+
       - name: Ensure images exist locally and load into cluster
         shell: bash
         run: |
           set -euo pipefail
           TAG="${{ steps.vars.outputs.TAG }}"
+
+          # Build locally if missing
           if ! docker image inspect "sample-api:$TAG" >/dev/null 2>&1; then
             echo "sample-api:$TAG missing; building…"
             docker build -t "sample-api:$TAG" "${{ github.workspace }}/backend"
@@ -52,6 +60,8 @@ jobs:
             echo "sample-frontend:$TAG missing; building…"
             docker build -t "sample-frontend:$TAG" "${{ github.workspace }}/frontend"
           fi
+
+          # Load into local cluster runtimes as needed
           if command -v minikube >/dev/null 2>&1; then
             echo "Detected minikube: loading images"
             minikube image load "sample-api:$TAG"
@@ -61,7 +71,7 @@ jobs:
             kind load docker-image "sample-api:$TAG"
             kind load docker-image "sample-frontend:$TAG"
           else
-            echo "Assuming Docker Desktop Kubernetes: images are already visible to the cluster"
+            echo "Assuming Docker Desktop Kubernetes: images already visible to cluster"
           fi
 
       - name: Ensure namespace & sidecar injection
@@ -71,34 +81,27 @@ jobs:
           kubectl get ns "$NAMESPACE" || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      - name: Apply Services and Istio routing
+      - name: Deploy via Helm (umbrella chart)
         shell: bash
         run: |
           set -euo pipefail
-          kubectl apply -f k8s/namespace.yaml
-          kubectl -n "$NAMESPACE" apply -f k8s/backend-service.yaml
-          kubectl -n "$NAMESPACE" apply -f k8s/frontend-service.yaml
-          kubectl -n "$NAMESPACE" apply -f k8s/istio/gateway.yaml
-          kubectl -n "$NAMESPACE" apply -f k8s/istio/virtualservice.yaml
+          TAG="${{ steps.vars.outputs.TAG }}"
 
-      - name: Ensure Deployments exist
-        shell: bash
-        run: |
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" apply -f k8s/backend-deployment.yaml || true
-          kubectl -n "$NAMESPACE" apply -f k8s/frontend-deployment.yaml || true
+          # (Optional) vendor local subchart deps; harmless with file:// deps
+          helm dependency update "./helm/chart" || true
 
-      - name: Update images to resolved TAG
-        shell: bash
-        run: |
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" set image deploy/api api="sample-api:${{ steps.vars.outputs.TAG }}"
-          kubectl -n "$NAMESPACE" set image deploy/web web="sample-frontend:${{ steps.vars.outputs.TAG }}"
+          helm upgrade --install fullstack "./helm/chart" \
+            --namespace "$NAMESPACE" --create-namespace \
+            --set api.image.repository=sample-api \
+            --set api.image.tag="$TAG" \
+            --set web.image.repository=sample-frontend \
+            --set web.image.tag="$TAG"
 
       - name: Wait for rollouts
         shell: bash
         run: |
           set -euo pipefail
+          # api & web Deployments are named after their release names in subcharts
           kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
           kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s
           kubectl -n "$NAMESPACE" get pods -o wide
@@ -108,11 +111,34 @@ jobs:
         run: |
           set -euo pipefail
           kubectl -n istio-system get svc istio-ingressgateway
+
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
-          sleep 3
+
+          # wait for port-forward
+          if command -v nc >/dev/null 2>&1; then
+            for i in {1..20}; do nc -z localhost 8080 && break || sleep 0.5; done
+          else
+            sleep 3
+          fi
+
           echo "== /api/health =="
-          curl -fsS http://localhost:8080/api/health | tee /tmp/health.json
-          echo "== / (frontend, first 10) =="
-          curl -fsS http://localhost:8080/ | head -n 10
+          curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
+
+          echo "== / (frontend first 10 lines) =="
+          curl -fsS "http://localhost:8080/" | head -n 10
+
           kill "$PF_PID" || true
+
+      - name: If failed, dump diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          echo "---- Pods ----"
+          kubectl -n "$NAMESPACE" get pods -o wide || true
+          echo "---- Events (tail) ----"
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -n 100 || true
+          echo "---- API logs ----"
+          kubectl -n "$NAMESPACE" logs deploy/api -c api --tail=200 || true
+          echo "---- WEB logs ----"
+          kubectl -n "$NAMESPACE" logs deploy/web -c web --tail=200 || true

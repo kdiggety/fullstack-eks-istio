@@ -1,0 +1,12 @@
+name: Rollback
+on: workflow_dispatch
+jobs:
+  rb:
+    runs-on: [self-hosted, local-k8s]
+    env: { NAMESPACE: sample }
+    steps:
+      - run: |
+          kubectl -n "$NAMESPACE" rollout undo deploy/api
+          kubectl -n "$NAMESPACE" rollout undo deploy/web
+          kubectl -n "$NAMESPACE" rollout status deploy/api
+          kubectl -n "$NAMESPACE" rollout status deploy/web

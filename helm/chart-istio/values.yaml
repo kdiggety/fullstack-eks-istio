@@ -1,0 +1,22 @@
+namespaceOverride: ""   # leave empty to use release namespace
+
+gateway:
+  name: web-gateway
+  hosts:
+    - "*"
+  port: 80
+
+virtualService:
+  name: fullstack-routing
+  hosts:
+    - "*"
+  gatewayName: web-gateway
+  routes:
+    web:
+      prefix: /
+      service: web
+      port: 80
+    api:
+      prefix: /api
+      service: api
+      port: 80

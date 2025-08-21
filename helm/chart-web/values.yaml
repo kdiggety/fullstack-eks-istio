@@ -1,0 +1,13 @@
+replicaCount: 1
+
+image:
+  repository: sample-frontend
+  tag: dev
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+
+readinessPath: /
+livenessPath: /
+containerPort: 80
