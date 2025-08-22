@@ -1,0 +1,12 @@
+dependencies:
+- name: api
+  repository: file://../chart-api
+  version: 0.1.0
+- name: web
+  repository: file://../chart-web
+  version: 0.1.0
+- name: istio
+  repository: file://../chart-istio
+  version: 0.1.0
+digest: sha256:f0ec88369562952e06f12a41e8a89377581a734c24d8567c845a44426884178b
+generated: "2025-08-21T21:58:32.106044-07:00"

@@ -40,3 +40,6 @@ crash.log
 
 # Ignore GitHub Actions self-hosted runner binaries/config
 actions-runner/
+
+# Helm build artifacts
+helm/chart/charts/*.tgz
