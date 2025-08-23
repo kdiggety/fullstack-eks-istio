@@ -46,8 +46,7 @@ jobs:
 
       - name: Build frontend Docker image
         run: |
-          docker build --build-arg VITE_API_BASE_URL="${{ secrets.FRONTEND_API_BASE_URL }}" /
-            -t "sample-frontend:${{ steps.vars.outputs.SHA_TAG }}" "${{ github.workspace }}/frontend"
+          docker build --build-arg VITE_API_BASE_URL="${{ secrets.FRONTEND_API_BASE_URL }}" -t "sample-frontend:${{ steps.vars.outputs.SHA_TAG }}" "${{ github.workspace }}/frontend"
 
       - name: Also tag image with release tag (if present)
         if: ${{ steps.vars.outputs.RELEASE_TAG != '' }}
