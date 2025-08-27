@@ -1,4 +1,4 @@
-# Node
+# Node.js dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -14,16 +14,18 @@ logs
 .DS_Store
 Thumbs.db
 
-# Env files
+# Local environment files
 .env
 .env.*
 !.env.example
+*.local
 
-# Build output
-dist/
-build/
+# macOS / Linux / Windows junk
+.DS_Store
+Thumbs.db
+*.swp
 
-# IDE/editor settings
+# IDE settings
 .vscode/
 .idea/
 *.swp
@@ -35,11 +37,22 @@ build/
 .terraform.lock.hcl
 crash.log
 
-# Local kube configs
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# Kubernetes / Helm
 .kube/
+helm/chart/charts/*/charts/
+helm/chart/charts/*/tmp/
+helm/chart/charts/*/Chart.lock
+helm/chart/charts/*/values.override.yaml
+helm/chart/charts/*.tgz
+
+# Sealed Secrets
+pub.pem   # <-- fetched public cert for kubeseal, do NOT commit
+*.sealed-secret.yaml
 
 # Ignore GitHub Actions self-hosted runner binaries/config
 actions-runner/
-
-# Helm build artifacts
-helm/chart/charts/*.tgz

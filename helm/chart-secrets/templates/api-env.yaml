@@ -1,0 +1,13 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: api-env
+  namespace: {{ .Release.Namespace }}
+spec:
+  encryptedData:
+    JWT_SECRET: {{ .Values.sealed.jwtSecret | quote }}
+  template:
+    metadata:
+      name: api-env
+      namespace: {{ .Release.Namespace }}
+    type: Opaque
