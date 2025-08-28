@@ -15,8 +15,7 @@ dependencies:
   - name: istio
     version: 0.1.0
     repository: "file://../chart-istio"
-  - name: chart-secrets
-    alias: secrets
+  - name: secrets
     version: 0.1.0
     repository: "file://../chart-secrets"
   - name: redis
