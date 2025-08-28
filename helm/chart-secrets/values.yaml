@@ -1,3 +1,9 @@
-sealed:
-  jwtSecret: "AgAjZtHAoTVZTeVeVPDB6fNms0cYTV0iJkMmuuA5JFCv+Z86qf4TiRfN5FX+NZ1hZLkdQ0CVUYEQ+gVIWdu+ZFQLf6ERe9e6Fh2Ls96NC1K0hVFueBGqnPSLBmLaNnhiH3GdctPb/EnI/ukwrUJdpVW5AguRuaFNNZn8kOwkRV2+gH6idQ5Aq5dwsuoQfEkZOKWD4EmkRFNZ/WcrcBwEVERAMzufcCD0r+Eh4sAuFUieb5xiRnuiHVFJFBKytbXxBuPqmf6tq3hbqtKGOfbcK8MnRG4Vy9AN1qgjLSBft6exPNxfgiqBVX3k3SBgHflapZHT/oiAde6BDKVEygsYC+z2Y66sFpE7+xf/kVeyVNN2lVk/e+IDTbQQAYVFdQqX1F2ChOj5MGppHmxU/DQTxHemUtulzvfm2fZ6iAUitaIFw5LzVCjujeTLf6Ckv5f4rM1TtXm2vjIC6KQTBBy33x4KLyaurq0xuy72WW3j9XulOqgfMmfAsMolLg6ZxaN16ETW8wH+hPUwQHBQmFSCZRGAqIzQJ4BkQFE2r241LoCuemfcnsDaWQst9KdsbQuz3otxeFDkIZ6qKFLorbuyiPuW/j/7K1WmUT3drjjbZ0G5mbk/ozLDUvXRGjtxASronhfOG68orGDzDA1ihGZeKhzQlwC00hCiDQTHq8xJXStN963U3xj7AiYHYp4K2NgpEzsy9AgOx4QC9qjH"       # put kubeseal ciphertext for JWT_SECRET
-  redisPassword: "AgBC2TlkHZdQSKy94GW7G/bnYRQuMAz17WkaRoR60mQS+Ld5OY/mrcpmYhJEqwbCVRUc4ThN3iyyWGB6ot8REndBBHuiuDuYpgm+aIjUIlUEZ2y+KBfSkZY7NKYAh6WYFunmPB3FYI73gtDkXsprrCt97zDUkv4bKcucU7eWT+2fC4bSNBCf2NBz/Fvm22S1MfnYHEiCYMTREzICJe9q1vb/tbpyJg2aIBM94YcknuFGaSbOeO9vqKmAbXvfbsLGaO6jjCkrEoI51SK+Q8Dfsj2Duq7ztHNTpR3qCWX2HFJLIVx5UkP7eNrAXfPphGO3mM4GvCKqL1YQ92egEJKFYte5gXt8tgv9VeIAshDiNQx3cYjwnSNy4Z5AE8xdhA51n+LXRIXPGLldq0HBn9pn7F1Un5bmMcYGU2a321SQR3ed5hC3cEq/pqmmEOUg6SlQCmUwXIw+3zwZlntsgCjkzz94Xtt4K7WcS6Xv9TqljGKp6DMIk3pInxYU2W5ryC8GLpGLiIvFdQ1r/3SU/LpT64iv5sl0C18Ml11rnIKa5hEL/mgiPDm5hhC4UZgemblHLf4GZLVjp8li/WjPQV25pYbOurxUAOVnhx4Zg/Lzla7RyHa/TTrR5Yyj8i0rnNjmaHy16Yv8C+RDTomES1fGaYSZmI8N7RFms+RMUVLrAjh3VoKzrppcclbyo6mZWr3fAaYxGUNegX/Jhock"   # put kubeseal ciphertext for redis-password
+# NOTE: Keep empty placeholders. The subchart will receive the real values from the parent via the dependency alias (secrets).
+secrets:
+  sealed:
+    webEnv:
+      apiBase: ""          # kubeseal ciphertext for API_BASE (e.g., "/api" or "https://dev.example.com/api")
+    apiEnv:
+      jwtSecret: ""        # kubeseal ciphertext for JWT_SECRET
+    redisAuth:
+      password: ""         # kubeseal ciphertext for redis-password
