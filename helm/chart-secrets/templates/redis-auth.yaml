@@ -1,0 +1,13 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: redis-auth
+  namespace: {{ .Release.Namespace }}
+spec:
+  encryptedData:
+    redis-password: {{ .Values.sealed.redisPassword | quote }}
+  template:
+    metadata:
+      name: redis-auth
+      namespace: {{ .Release.Namespace }}
+    type: Opaque

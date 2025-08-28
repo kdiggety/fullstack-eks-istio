@@ -9,10 +9,11 @@ Supports local clusters (Docker Desktop, minikube, kind) and can be extended to 
 - **frontend** → React + Vite, served by Nginx container
 - **backend** → Node + Express, with Prometheus metrics at `/metrics`
 - **helm/** → Umbrella Helm chart managing:
-  - `chart-api` (backend Deployment + Service)
-  - `chart-web` (frontend Deployment + Service)
-  - `chart-istio` (Gateway + VirtualService for routing)
-  - `chart-secrets` (Sealed Secrets for runtime env)
+  - `api` (backend Deployment + Service)
+  - `web` (frontend Deployment + Service)
+  - `istio` (Gateway + VirtualService for routing)
+  - `secrets` (Sealed Secrets for runtime env)
+  - `redis` (Bitnami subchart, standalone mode for dev)
 - **Istio** → ingress gateway + VirtualService (`/api` → backend, `/` → frontend)
 - **GitHub Actions**:
   - `ci-backend.yml` / `ci-frontend.yml` → build & tag Docker images
@@ -20,8 +21,8 @@ Supports local clusters (Docker Desktop, minikube, kind) and can be extended to 
   - `rollback.yml` → rollback Helm release
   - `promote.yml` → promote a tagged build into staging namespace
 - **Secrets**:
-  - Runtime → Kubernetes Sealed Secrets (e.g. `JWT_SECRET`)
-  - Build-time → GitHub Actions Secrets (e.g. `FRONTEND_API_BASE_URL`)
+  - Runtime → Kubernetes Sealed Secrets (`JWT_SECRET`, `API_BASE`, `redis-password`)
+  - Build-time → GitHub Actions Secrets (`FRONTEND_API_BASE_URL`)
 
 ---
 
@@ -130,7 +131,43 @@ kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80
 
 ---
 
-## Secrets
+## Working with Sealed Secrets
+
+### Step 1: Fetch the public cert (`sealed-secrets-pubcert.pem`)
+```bash
+kubeseal --controller-namespace kube-system \
+  --controller-name sealed-secrets \
+  --fetch-cert > sealed-secrets-pubcert.pem
+```
+
+### Step 2: Seal secrets
+Use the `sealed-secrets-pubcert.pem` file when sealing secrets. Below are examples for each of your runtime secrets:
+
+- **API JWT secret**
+  ```bash
+  echo -n 'my-jwt-secret' | \
+    kubectl create secret generic api-env \
+      --from-literal=JWT_SECRET=/dev/stdin \
+      --dry-run=client -o yaml | \
+    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
+   ```
+- **WEB API base**
+  ```bash
+  echo -n '/api' | \
+    kubectl create secret generic web-env \
+      --from-literal=API_BASE=/dev/stdin \
+      --dry-run=client -o yaml | \
+    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
+  ```
+- **Redis password**
+  ```bash
+  echo -n 'redis-pass' | \
+    kubectl create secret generic redis-auth \
+      --from-literal=redis-password=/dev/stdin \
+      --dry-run=client -o yaml | \
+    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
+
+  ```
 
 - **Runtime** (backend):  
   Managed via **Sealed Secrets** (`helm/chart-secrets`). Example: `JWT_SECRET`.
