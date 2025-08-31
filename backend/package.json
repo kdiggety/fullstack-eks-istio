@@ -7,6 +7,10 @@
     "dev": "node --watch src/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
+  "jest": {
+    "testEnvironment": "node",
+    "extensionsToTreatAsEsm": [".js"]
+  },
   "dependencies": {
     "express": "^4.19.2",
     "prom-client": "^15.1.3"
