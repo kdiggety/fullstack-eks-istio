@@ -1,6 +1,6 @@
 import makeRedisWrapper from "./redis-wrapper.js";
 
-const DEFAULT_TTL = Number(process.env.GREETINGS_TTL || 30; // 30 seconds default
+const DEFAULT_TTL = Number(process.env.GREETINGS_TTL) || 30; // 30 seconds default
 // Create a namespaced wrapper once
 const greetingStore = makeRedisWrapper({
   namespace: 'greetings',
