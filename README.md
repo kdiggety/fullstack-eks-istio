@@ -111,6 +111,11 @@ TAG=dev
 helm upgrade --install fullstack ./helm/chart   -n sample --create-namespace --dependency-update   --set api.image.repository=sample-api   --set api.image.tag=$TAG   --set web.image.repository=sample-frontend   --set web.image.tag=$TAG
 ```
 
+## Validate pods are running
+```bash
+kubectl -n sample get pods
+```
+
 Access via Istio ingress:
 ```bash
 kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80
