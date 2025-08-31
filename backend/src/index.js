@@ -1,6 +1,6 @@
-import express from "express";
-import routes from "./routes.js";
-import client from "prom-client";
+const express = require('express');
+const client = require("prom-client");
+const routes = require("./routes");
 
 const app = express();
 app.use(express.json());

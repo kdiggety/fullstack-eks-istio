@@ -1,10 +1,46 @@
-import { Router } from "express";
+// src/routes.js (CommonJS)
+const { Router } = require('express');
+const { getGreeting, setGreeting } = require('./greeting-service');
+
 const r = Router();
 
-r.get("/health", (_req, res) => res.json({ ok: true, service: "api", ts: Date.now() }));
+// Health check
+r.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'api', ts: Date.now() });
+});
 
-r.get("/greet/:name", (req, res) => {
+// Simple greet echo
+r.get('/greet/:name', (req, res) => {
   res.json({ message: `Hello, ${req.params.name}! 😁👋🏾` });
 });
 
-export default r;
+// Get greeting by id
+r.get('/greeting/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const greeting = await getGreeting(id);
+    if (greeting == null) {
+      return res.status(404).json({ ok: false, message: 'greeting not found', id });
+    }
+    res.json({ ok: true, id, greeting });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Set/overwrite greeting
+r.post('/greeting/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { greeting, ttl } = req.body || {};
+    if (greeting == null) {
+      return res.status(400).json({ ok: false, message: '`greeting` is required in body' });
+    }
+    await setGreeting(id, greeting, ttl);
+    res.status(201).json({ ok: true, id, greeting, ttl: ttl ?? null });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+module.exports = r;
