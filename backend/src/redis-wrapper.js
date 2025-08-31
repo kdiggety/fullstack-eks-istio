@@ -1,4 +1,4 @@
-const redisClient = require("./redis-client.js');
+const redisClient = require('./redis-client.js');
 
 // A tiny wrapper around ioredis with JSON helpers, TTL, and namespacing.
 const DEFAULT_TTL = null; // seconds; null = no expiry
