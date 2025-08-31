@@ -8,8 +8,7 @@
     "test": "jest"
   },
   "jest": {
-    "testEnvironment": "node",
-    "extensionsToTreatAsEsm": [".js"]
+    "testEnvironment": "node"
   },
   "dependencies": {
     "express": "^4.19.2",
