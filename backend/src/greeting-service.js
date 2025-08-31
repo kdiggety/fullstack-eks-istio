@@ -1,9 +1,8 @@
-const redis = require('../redis');                   // ioredis client instance
 import makeRedisWrapper from "./redis-wrapper.js";
 
 const DEFAULT_TTL = Number(process.env.GREETINGS_TTL || 30; // 30 seconds default
 // Create a namespaced wrapper once
-const greetingStore = makeRedisWrapper(redis, {
+const greetingStore = makeRedisWrapper({
   namespace: 'greetings',
   defaultTtl: DEFAULT_TTL,
 });
