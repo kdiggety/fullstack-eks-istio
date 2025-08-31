@@ -1,5 +1,5 @@
 import request from "supertest";
-import express from "express";
+const express = require('express');
 import routes from "../src/routes.js";
 
 test("health", async () => {
