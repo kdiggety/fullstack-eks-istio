@@ -1,6 +1,6 @@
 // src/routes.js (CommonJS)
 const { Router } = require('express');
-const { getGreeting, setGreeting } = require('./greeting-service'); // no .js extension in CJS
+const { getGreeting, setGreeting } = require('./greeting-service');
 
 const r = Router();
 
