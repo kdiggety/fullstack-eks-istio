@@ -1,4 +1,4 @@
-import express from "express";
+const express = require('express');
 import client from "prom-client";
 import routes from "./routes.js";
 
