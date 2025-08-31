@@ -1,6 +1,6 @@
-import request from "supertest";
+const request = require('supertest');
 const express = require('express');
-import routes from "../src/routes.js";
+const routes = require('../src/routes');  // drop `.js` if in CJS
 
 test("health", async () => {
   const app = express();
