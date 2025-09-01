@@ -81,6 +81,13 @@ jobs:
           kubectl get ns "$NAMESPACE" || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
+      - name: Add helm repos
+        shell: bash
+        run: |
+          set -euo pipefail
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
       - name: Deploy via Helm (umbrella chart)
         shell: bash
         run: |
