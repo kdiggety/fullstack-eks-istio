@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   encryptedData:
-    redis-password: {{ .Values.sealed.redisPassword | quote }}
+    redis-password: {{ .Values.sealed.redisAuth.password | quote }}
   template:
     metadata:
       name: redis-auth
