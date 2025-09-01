@@ -180,6 +180,33 @@ Use the `sealed-secrets-pubcert.pem` file when sealing secrets. Below are exampl
   Store `FRONTEND_API_BASE_URL` in GitHub Actions Secrets.  
   Passed into the Docker build with `--build-arg` so Vite picks it up as `import.meta.env.VITE_API_BASE`.
 
+## Troubleshooting the Redis Sealed Secrets
+
+- **Step 1: Pick a Redis pod**:
+```bash
+REDIS_POD=$(kubectl -n sample get pods -l app.kubernetes.io/name=redis -o jsonpath='{.items[0].metadata.name}')
+```
+
+- **Step 2: Get the password from the Secret**:
+```bash
+REDIS_PW=$(kubectl -n sample get secret redis-auth -o jsonpath='{.data.redis-password}' | base64 -d)
+```
+
+- **Step 3: Without a password you should see NOAUTH**:
+```bash
+kubectl -n sample exec -it "$REDIS_POD" -- redis-cli PING
+```
+
+- **Step 4: With the password you should see PONG**:
+```bash
+kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" PING
+```
+
+- **Step 5: Quick write/read**:
+```bash
+kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" SET probe "ok"
+kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" GET probe
+```
 ---
 
 ## Stretch goals
