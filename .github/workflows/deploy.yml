@@ -84,18 +84,38 @@ jobs:
       - name: Deploy via Helm (umbrella chart)
         shell: bash
         run: |
-          set -euo pipefail
-          TAG="${{ steps.vars.outputs.TAG }}"
-
-          # (Optional) vendor local subchart deps; harmless with file:// deps
-          helm dependency update "./helm/chart" || true
-
-          helm upgrade --install fullstack "./helm/chart" \
-            --namespace "$NAMESPACE" --create-namespace \
-            --set api.image.repository=sample-api \
-            --set api.image.tag="$TAG" \
-            --set web.image.repository=sample-frontend \
-            --set web.image.tag="$TAG"
+            set -euo pipefail
+            TAG="${{ steps.vars.outputs.TAG }}"
+            
+            # Make sure we’re deploying the exact commit that contains your updated values.yaml
+            git rev-parse --short HEAD
+            sed -n '1,160p' helm/chart/values.yaml
+            
+            # Build/fetch subchart deps (fail fast if this breaks)
+            helm dependency build "./helm/chart"
+            
+            # (Optional but great for catching missing values)
+            echo "Rendering SealedSecrets to verify encryptedData exists..."
+            helm template fullstack "./helm/chart" -n "$NAMESPACE" \
+              | awk '/kind: SealedSecret/{flag=1} flag{print} /---/{flag=0}' \
+              | sed -n '1,200p'
+            
+            # Upgrade/install with dependency update
+            helm upgrade --install fullstack "./helm/chart" \
+              --namespace "$NAMESPACE" --create-namespace \
+              --dependency-update \
+              --set api.image.repository=sample-api \
+              --set api.image.tag="$TAG" \
+              --set web.image.repository=sample-frontend \
+              --set web.image.tag="$TAG"
+            
+            # Verify the release picked up the ciphertext and redis Secret exists
+            echo "Checking SealedSecret and Secret in cluster..."
+            kubectl -n "$NAMESPACE" get sealedsecret redis-auth -o jsonpath='{.spec.encryptedData.redis-password}{"\n"}'
+            kubectl -n "$NAMESPACE" get secret redis-auth -o jsonpath='{.data.redis-password}{"\n"}' || true
+            
+            # Nudge redis to reload the secret if needed
+            kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=redis || true
 
       - name: Wait for rollouts
         shell: bash

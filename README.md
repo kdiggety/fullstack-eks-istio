@@ -171,7 +171,6 @@ Use the `sealed-secrets-pubcert.pem` file when sealing secrets. Below are exampl
       --from-literal=redis-password=/dev/stdin \
       --dry-run=client -o yaml | \
     kubeseal --format yaml --cert sealed-secrets-pubcert.pem
-
   ```
 
 - **Runtime** (backend):  
