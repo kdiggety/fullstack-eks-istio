@@ -1,9 +1,8 @@
 # NOTE: Keep empty placeholders. The subchart will receive the real values from the parent via the dependency alias (secrets).
-secrets:
-  sealed:
-    webEnv:
-      apiBase: ""          # kubeseal ciphertext for API_BASE (e.g., "/api" or "https://dev.example.com/api")
-    apiEnv:
-      jwtSecret: ""        # kubeseal ciphertext for JWT_SECRET
-    redisAuth:
-      password: ""         # kubeseal ciphertext for redis-password
+sealed:
+  webEnv:
+    apiBase: ""          # kubeseal ciphertext for API_BASE (e.g., "/api" or "https://dev.example.com/api")
+  apiEnv:
+    jwtSecret: ""        # kubeseal ciphertext for JWT_SECRET
+  redisAuth:
+    password: ""         # kubeseal ciphertext for redis-password
