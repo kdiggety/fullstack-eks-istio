@@ -140,13 +140,11 @@ kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80
 
 ### Step 1: Fetch the public cert (`sealed-secrets-pubcert.pem`)
 ```bash
-kubeseal --controller-namespace kube-system \
-  --controller-name sealed-secrets \
-  --fetch-cert > sealed-secrets-pubcert.pem
+kubeseal --controller-namespace kube-system --controller-name sealed-secrets --fetch-cert > pub.pem
 ```
 
 ### Step 2: Seal secrets
-Use the `sealed-secrets-pubcert.pem` file when sealing secrets. Below are examples for each of your runtime secrets:
+Use the `pub.pem` file when sealing secrets. Below are examples for each of your runtime secrets:
 
 - **API JWT secret**
   ```bash
