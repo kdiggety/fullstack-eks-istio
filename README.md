@@ -169,8 +169,24 @@ kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80
   Store `FRONTEND_API_BASE_URL` in GitHub Actions Secrets.  
   Passed into the Docker build with `--build-arg` so Vite picks it up as `import.meta.env.VITE_API_BASE`.
 
-## Troubleshooting the Redis Sealed Secrets
+## Testing the JWT secret
+- **Get the exact secret from your cluster**
+```bash
+export JWT_SECRET=$(kubectl -n sample get secret api-env -o jsonpath='{.data.JWT_SECRET}' | base64 -d)
+```
 
+- **Generate a 5-minute token (no local project needed)**
+```bash
+TOKEN=$(npx -y -p jsonwebtoken node -e \
+"const jwt=require('jsonwebtoken');console.log(jwt.sign({sub:'smoke-test'},process.env.JWT_SECRET,{expiresIn:'5m'}));")
+```
+
+- **Test a protected route**
+```bash
+curl -i -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/secure/ping
+```
+
+## Testing the Redis Sealed Secrets
 - **Step 1: Pick a Redis pod**:
 ```bash
 REDIS_POD=$(kubectl -n sample get pods -l app.kubernetes.io/name=redis -o jsonpath='{.items[0].metadata.name}')
@@ -195,6 +211,12 @@ kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" PING
 ```bash
 kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" SET probe "ok"
 kubectl -n sample exec -it "$REDIS_POD" -- redis-cli -a "$REDIS_PW" GET probe
+```
+
+- **Step 6: Call the API endpoints for Redis integration read/write operations:
+```bash
+curl -i -X POST http://localhost:8080/api/greeting/123   -H "Content-Type: application/json"   -d '{"greeting":"Hello, world!","ttl":60}'
+curl -i -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/greeting/123
 ```
 ---
 
