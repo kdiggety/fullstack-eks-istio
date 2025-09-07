@@ -138,38 +138,29 @@ kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80
 
 ## Working with Sealed Secrets
 
-### Step 1: Fetch the public cert (`sealed-secrets-pubcert.pem`)
+### Step 1: Generate a strong secret
 ```bash
-kubeseal --controller-namespace kube-system --controller-name sealed-secrets --fetch-cert > pub.pem
+  JWT=$(openssl rand -hex 32)
 ```
 
-### Step 2: Seal secrets
-Use the `pub.pem` file when sealing secrets. Below are examples for each of your runtime secrets:
+### Step 2: Create a Secret manifest on stdout, piping the value 
+```bash
+  kubectl -n sample create secret generic api-env \
+    --from-literal=JWT_SECRET="$JWT" \
+    --dry-run=client -o json \
+  | kubeseal \
+    --controller-name=sealed-secrets \
+    --controller-namespace=kube-system \
+    --format yaml \
+    > helm/umbrella/chart-secrets/templates/api-env.sealed.yaml
+```
 
-- **API JWT secret**
-  ```bash
-  echo -n 'my-jwt-secret' | \
-    kubectl create secret generic api-env \
-      --from-literal=JWT_SECRET=/dev/stdin \
-      --dry-run=client -o yaml | \
-    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
-   ```
-- **WEB API base**
-  ```bash
-  echo -n '/api' | \
-    kubectl create secret generic web-env \
-      --from-literal=API_BASE=/dev/stdin \
-      --dry-run=client -o yaml | \
-    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
-  ```
-- **Redis password**
-  ```bash
-  echo -n 'redis-pass' | \
-    kubectl create secret generic redis-auth \
-      --from-literal=redis-password=/dev/stdin \
-      --dry-run=client -o yaml | \
-    kubeseal --format yaml --cert sealed-secrets-pubcert.pem
-  ```
+### Step 3: Validate the Secret
+```bash
+  kubectl -n sample get sealedsecret api-env
+  kubectl -n sample get secret api-env -o jsonpath='{.data.JWT_SECRET}' | grep . && echo "OK"
+  kubectl -n sample describe pod <api-pod-name> | sed -n '/Environment:/,/Mounts:/p'
+```
 
 - **Runtime** (backend):  
   Managed via **Sealed Secrets** (`helm/chart-secrets`). Example: `JWT_SECRET`.

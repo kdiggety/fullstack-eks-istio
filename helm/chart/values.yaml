@@ -42,6 +42,11 @@ api:
     pullPolicy: IfNotPresent
   replicaCount: 1
 
+  jwt:
+    enabled: true                 # <- set false to omit JWT_SECRET env entirely
+    secretName: api-env           # <- runtime Secret name
+    secretKey: JWT_SECRET         # <- key inside the Secret (case-sensitive)
+
   service:
     type: ClusterIP
     port: 80
@@ -52,10 +57,6 @@ api:
     port: 6379
     passwordSecretName: redis-auth
     passwordSecretKey: redis-password
-
-  # Optional: if your api chart supports envFromSecrets, this pulls JWT_SECRET
-  envFromSecrets:
-    - api-env
 
   # Optional direct env (keep empty unless needed)
   env: []
@@ -133,6 +134,6 @@ secrets:
     webEnv:
       apiBase: "AgAqlr1O8BNEcy5ATJjEGYvc9A2a0ErZ7pWtzozUdG06wgbGI1UTnw3xuoL/JozmhMdE9/dmkH/i9r2l6dY/1faTdcvGyHBhRAzYEqSQrRaTKHd6nd13tTrI9I9baZX6S3GDommU1hK73oT3n7RwQj/nOKwoEwkvPgE2aHlKlHI8FtKAvjGhw2gD3e7rLXMkkWrE1e7BQLJTJwWnk/SkVYP1ORm59llp+T1TstKuKznZe9q2dB9vyGgpxWH4hl38T2LYesRPTDxOWNPtwalh5R2KQ/Sfvn1QKL2Rh93GwSiSzujQ2yJ7UnXCwMWn7WbsxBWeHEst/z07afeh/fIny0qvokMQMI/g30t3zWQXDT5Q0dawFp+Z7nZZFBtfXwDGGHwK2KwyjzQC5oY1Gc2+lG7uYCaluUSvVS2lkaDHsq1JQi3n9M75g4wYd+y95rrDGjtp5U9i7AALiZgct2D9g8iHUr9gzEYDx22PvU9UakqcqNuW0AL1+zT3lud+28L6nds5Aps2+IPW4vWMonLuAy4QMrpYibkn9bKvX5Pmn7e9Hw+mtECl1dmYofEcf+NLSBvYmOAUFdJXuetECbzrrFPZffF/WV+8H3msZ8hzplOafJPS9Arb8AU3TmNj89ENTpFlGjZ2QyzlGJKWZKmS2j9KcPandkRpNIUaMJINCBvHwZFM7MjM+zDI4/oz1o85EUyUvrk8uJ0C5XkJ"
     apiEnv:
-      jwtSecret: "AgCPTIHfwQHpNUCosgfczu1vBnYqOpdaCVeDyzChyI6En19z12qDwW58VgKrhzsin1DzP/NXjIczSsXl1cCDQ8oTJnoISjXxozcP0QioM6K2ipLkrIuQVzfphE8GaVVD0PJBQQW7LqEchksr1l6qsNAJdMgEEHkYtB9/2alt1Q9rSqkFUyjGEo24IbjIek2NBzNHsn9YyoOBt6G4zqiwLWfepkedtlaKpHjdHAMVIMmUtEQoNr0pHBSaAjhnNxXtHe8LJbGRbcxw1Rt4PS3u616hH9JVkCpXK3oeOuA9o2MFLhIbLieJnZ4+gujfuOzpvjbn3QV/FS4KkV9CJmamydTFsiKb1o5pC2/7ZFljrasOgUDZItCZ/K0KnylqKxyTXu/QPKKpjDpjPJt+QdqnlcLDc+eBKZRUsY8oW9DVWGP6TNNj5OUo/DhXE6+zUR5aOTzEanR2RrF706lMEQbdhf3TeLi58N2UwtgfThr2Wbw4pCoqfA9Ap+G17KNzlZJ/zAMhm63MS68QaB5TEUr8+N9YqFv0MejwYkYah389OysqU5Y1BnK1UAPT14nstL/4v4mK3BCHSqHwtnoSqWAUOG/Rkcf1U0VKB5jQqQramSAw1GWw6tNmtyEdav7l5d5HBtYt023Wu6UPOPOqmbLPry7Efa+Zoc+vW6PBiSwFAuScU8+YNDa/OxSsUtIx/lq+8fmwxAu/ouGW/+FR"
+      jwtSecret: "AgBU0wYPyb12Aj+XYkfFUX+HLcv8ByiSiKS2VFTvXwHXTrOBD9j7QTbvpjLnmGkPnOAvxVIJnHn7U87GMeacpwIJgrhX9PgE+S4Jp8Fggw3QK47SnMQf+3SuPteGRovZXpQWY2WcMHw/DHdlTxhKkci0lVUwLYSbT574t1YwFj9TbjSVShK14t8urYNaFuGRtXycdAU/aroCxOLP36ewkP+kgBkT+nUonx1aT4GQugT3YP5lFVOk2VrZgb93WzUUVCABsf4gLfHotz2QMUXYkxSK/pKkVNwaQUdXDWvw1YGyjL2M6rGBVCfHuZ176l1gyDjx/QhAmJ5LbDkL7JXFuRLMmiJ3Fdj/XEy/Pq7WbTk9TllRaBBDS8YF8hF8kCy0NubiOmiPeYf1zfcv5t8psUAnhQQHRL5LKdiPMV9wkVD1RlMc9LQQP+5dtExnULpJI+lT4Ml1GKSB08hGCBah/Pg/0UlPQH/lJ8A51L/RvWFpMxkDRpQqanuV/WX4UrRy0nq6+UGV+1Ln1Vs/HWod8KteUcms+v9tUlwjo7I3a4KQ+wl7eAh362KoOuOIsvnU9KighZf2v+p683X7nz3/stukmdmHCRHsy3KSOham7bZoKfjF3f6Lda4xC3ojPy6ce3zAsEUFNZNSTQh/vYB6yg+ILaa3NaQahr1/noAWenRyr4PlO8j6TUY8wwhIqn5vo89yrdnaokDp+V40PChfJEQPGXuN12pCLxk4mNKRTBcD03BV+SlfHh+VkmEHvNLVihM9l6yd2bkhTk++NGG2O5U7"
     redisAuth:
       password: "AgCPu0er4ygBuwDGmSe4+924q/G+PTSecPwMAlmR1YFqTSf2cXDovwCphas9smtnRhygPq3qGEBQK+gfsOg8Bkhb5S9YMJ0qy/7nkpueES4SUmyRX3vwjrqM2sjWtfpECOvfpHriyoImRKATEJq9Ee6G5LvKoN8CAizjLC5bYzXBif4hAmJ+1WDCeNNKMqJP2VdxzUIBYgAgEMG74A4i/DbUOy4AnBaVYwk1mSnfPOEg3FnPiLNwWfb2uRpiNfi2nhjp8zZQ2saYOI/KWXPwD2M+In2cHU47MX0a/oeSebTnnkEnzWs2CncfTQYwOyytttc/dcQucLcqYOKgR3Xiisb1Cg7as/xLqvFPHLKJlRxyQ0Wv8l+uG8FTeITjIyTCd8Mm3aBofkv8/mqGVEzcjdTO7Dd2z4z525Fnx7ndiR+q71QCPh7gSysKarMiMS2LeZ82bb5E5NobgDUXFzcnZ/KCfJYpcIZKR2MNb/7xWmzEHwrQrOdR0v2tKNJ16XZmqaTrSB9WLSEwiLMBAQrE+O/Cfj9rHauFQ6nhdxDJ3FgCFtjtXblnC24hIiH83YhSFN61oLXTUyaN+vOjosQwJOsUGhpkYqYB73mzprkc+NuKfrUc6f0YtpJswvIuItEgypTYX8zZuDOETbSZtjRxEXw9cTS1HnXqH3KZx0cjFGViF6esv2UjSoQoGDZytXo1cdzhxamVhiS9zN+RW3kWySTMwdJlYB2BPOEMBJ6moms+DoaAk2ULpNHPNvgfOw=="
