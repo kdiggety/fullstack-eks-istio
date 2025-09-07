@@ -5,15 +5,6 @@ const jwt = require('jsonwebtoken');
 
 const r = Router();
 
-// Health check
-r.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'api', ts: Date.now() });
-});
-
-r.get('/api/secure/ping', requireJwt, (req, res) => {
-  res.json({ ok: true, user: { sub: req.user.sub } });
-});
-
 const requireJwt = (req, res, next) => {
   const hdr = req.headers.authorization || '';
   const m = hdr.match(/^Bearer (.+)$/);
@@ -25,6 +16,15 @@ const requireJwt = (req, res, next) => {
     return res.status(401).json({ error: 'invalid token' });
   }
 };
+
+// Health check
+r.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'api', ts: Date.now() });
+});
+
+r.get('/api/secure/ping', requireJwt, (req, res) => {
+  res.json({ ok: true, user: { sub: req.user.sub } });
+});
 
 // Simple greet echo
 r.get('/greet/:name', (req, res) => {
