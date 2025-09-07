@@ -35,12 +35,12 @@ spec:
                   name: {{ .Values.redis.passwordSecretName | quote }}
                   key:  {{ .Values.redis.passwordSecretKey  | quote }}
             # (optional) load other runtime env (e.g., JWT_SECRET) from api-env
-            {{- if .Values.envFromSecret }}
+            {{- if .Values.jwt.enabled }}
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.envFromSecret | quote }}
-                  key: "JWT_SECRET"
+                  name: {{ required "jwt.secretName is required when jwt.enabled=true" .Values.jwt.secretName | quote }}
+                  key:  {{ default "JWT_SECRET" .Values.jwt.secretKey | quote }}
             {{- end }}
           readinessProbe:
             httpGet:

@@ -1,6 +1,7 @@
 // src/routes.js (CommonJS)
 const { Router } = require('express');
 const { getGreeting, setGreeting } = require('./greeting-service');
+const jwt = require('jsonwebtoken');
 
 const r = Router();
 
@@ -8,6 +9,22 @@ const r = Router();
 r.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'api', ts: Date.now() });
 });
+
+r.get('/api/secure/ping', requireJwt, (req, res) => {
+  res.json({ ok: true, user: { sub: req.user.sub } });
+});
+
+const requireJwt = (req, res, next) => {
+  const hdr = req.headers.authorization || '';
+  const m = hdr.match(/^Bearer (.+)$/);
+  if (!m) return res.status(401).json({ error: 'missing bearer token' });
+  try {
+    req.user = jwt.verify(m[1], process.env.JWT_SECRET); // uses your K8s secret
+    return next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid token' });
+  }
+};
 
 // Simple greet echo
 r.get('/greet/:name', (req, res) => {
