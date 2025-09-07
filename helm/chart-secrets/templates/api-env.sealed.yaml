@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: api-env
+  namespace: sample
+spec:
+  encryptedData:
+    JWT_SECRET: AgBU0wYPyb12Aj+XYkfFUX+HLcv8ByiSiKS2VFTvXwHXTrOBD9j7QTbvpjLnmGkPnOAvxVIJnHn7U87GMeacpwIJgrhX9PgE+S4Jp8Fggw3QK47SnMQf+3SuPteGRovZXpQWY2WcMHw/DHdlTxhKkci0lVUwLYSbT574t1YwFj9TbjSVShK14t8urYNaFuGRtXycdAU/aroCxOLP36ewkP+kgBkT+nUonx1aT4GQugT3YP5lFVOk2VrZgb93WzUUVCABsf4gLfHotz2QMUXYkxSK/pKkVNwaQUdXDWvw1YGyjL2M6rGBVCfHuZ176l1gyDjx/QhAmJ5LbDkL7JXFuRLMmiJ3Fdj/XEy/Pq7WbTk9TllRaBBDS8YF8hF8kCy0NubiOmiPeYf1zfcv5t8psUAnhQQHRL5LKdiPMV9wkVD1RlMc9LQQP+5dtExnULpJI+lT4Ml1GKSB08hGCBah/Pg/0UlPQH/lJ8A51L/RvWFpMxkDRpQqanuV/WX4UrRy0nq6+UGV+1Ln1Vs/HWod8KteUcms+v9tUlwjo7I3a4KQ+wl7eAh362KoOuOIsvnU9KighZf2v+p683X7nz3/stukmdmHCRHsy3KSOham7bZoKfjF3f6Lda4xC3ojPy6ce3zAsEUFNZNSTQh/vYB6yg+ILaa3NaQahr1/noAWenRyr4PlO8j6TUY8wwhIqn5vo89yrdnaokDp+V40PChfJEQPGXuN12pCLxk4mNKRTBcD03BV+SlfHh+VkmEHvNLVihM9l6yd2bkhTk++NGG2O5U7
+  template:
+    metadata:
+      creationTimestamp: null
+      name: api-env
+      namespace: sample
