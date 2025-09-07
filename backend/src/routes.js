@@ -22,7 +22,7 @@ r.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'api', ts: Date.now() });
 });
 
-r.get('/api/secure/ping', requireJwt, (req, res) => {
+r.get('/secure/ping', requireJwt, (req, res) => {
   res.json({ ok: true, user: { sub: req.user.sub } });
 });
 
