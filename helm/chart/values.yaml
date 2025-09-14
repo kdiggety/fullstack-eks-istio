@@ -99,6 +99,10 @@ web:
     limits:
       cpu: "250m"
       memory: "256Mi"
+  runtimeConfig:
+    googleClientId: "757483491986-s6es27343115bs05medv52v506cg81b0.apps.googleusercontent.com"
+    apiBase: "/api"
+
 
 # -----------------------------------------------------------------------------
 # Istio ingress layer — your chart aliased as `istio`
@@ -127,7 +131,6 @@ istio:
 # SealedSecrets — your chart aliased as `secrets`
 # These ciphertexts are produced by `kubeseal` and render to:
 #   - Secret web-env    with key: API_BASE
-#   - Secret api-env    with key: JWT_SECRET
 #   - Secret redis-auth with key: redis-password
 # Commit ciphertext safely; never commit raw secrets.
 # -----------------------------------------------------------------------------
