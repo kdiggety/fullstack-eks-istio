@@ -1,18 +1,18 @@
-const { createRemoteJWKSet, jwtVerify } = require("jose");
-
 const ISS_PRIMARY = process.env.OIDC_ISSUER_PRIMARY || "https://accounts.google.com";
 const ISS_ALT     = process.env.OIDC_ISSUER_ALT     || "accounts.google.com";
 const AUDIENCE    = process.env.OIDC_AUDIENCE; // your Google client ID
 
 // Google's JWKS endpoint
 const GOOGLE_JWKS_URL = new URL("https://www.googleapis.com/oauth2/v3/certs");
-const JWKS = createRemoteJWKSet(GOOGLE_JWKS_URL);
 
 function isAllowedIssuer(iss) {
   return iss === ISS_PRIMARY || iss === ISS_ALT;
 }
 
 async function verifyIdToken(token) {
+  const { createRemoteJWKSet, jwtVerify } = await import("jose");
+  const JWKS = createRemoteJWKSet(GOOGLE_JWKS_URL);
+
   const { payload } = await jwtVerify(token, JWKS, {
     audience: AUDIENCE,
     // We’ll check issuer manually so we accept either primary or alt
