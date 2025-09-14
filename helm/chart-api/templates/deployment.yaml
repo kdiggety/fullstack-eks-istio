@@ -34,21 +34,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.redis.passwordSecretName | quote }}
                   key:  {{ .Values.redis.passwordSecretKey  | quote }}
-            - name: OIDC_ISSUER_PRIMARY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.envSecretName | default "api-env" | quote }}
-                  key: "OIDC_ISSUER_PRIMARY"
-            - name: OIDC_ISSUER_ALT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.envSecretName | default "api-env" | quote }}
-                  key: "OIDC_ISSUER_ALT"
-            - name: OIDC_AUDIENCE
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.envSecretName | default "api-env" | quote }}
-                  key: "OIDC_AUDIENCE"
 
           readinessProbe:
             httpGet:

@@ -17,6 +17,10 @@ spec:
         app: web
         app.kubernetes.io/name: {{ .Chart.Name }}
     spec:
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: {{ include "web.fullname" . }}-runtime-config
       containers:
         - name: web
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -36,3 +40,7 @@ spec:
               port: {{ .Values.containerPort }}
             initialDelaySeconds: 10
             periodSeconds: 10
+          volumes:
+            - name: runtime-config
+              configMap:
+                name: {{ include "web.fullname" . }}-runtime-config

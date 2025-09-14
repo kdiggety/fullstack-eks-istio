@@ -2,7 +2,5 @@
 sealed:
   webEnv:
     apiBase: ""          # kubeseal ciphertext for API_BASE (e.g., "/api" or "https://dev.example.com/api")
-  apiEnv:
-    jwtSecret: ""        # kubeseal ciphertext for JWT_SECRET
   redisAuth:
     password: ""         # kubeseal ciphertext for redis-password

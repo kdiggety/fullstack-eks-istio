@@ -1,8 +1,9 @@
 import { useAuth } from "../auth/AuthProvider";
+import { getApiBase } from "../config";
 
 export function useApi() {
   const { token } = useAuth();
-  const base = import.meta.env.VITE_API_BASE || "/api";
+  const base = getApiBase() || "/api";
 
   async function get(path) {
     const r = await fetch(`${base}${path}`, {

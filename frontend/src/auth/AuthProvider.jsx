@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { getClientId } from "../config";
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID; // set at build time
+
+//const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID; // set at build time
+const CLIENT_ID = getClientId();
 const AuthCtx = createContext({ token: null, user: null, signIn: () => {}, signOut: () => {} });
 export const useAuth = () => useContext(AuthCtx);
 
