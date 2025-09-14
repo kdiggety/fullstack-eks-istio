@@ -13,7 +13,7 @@ dependencies:
     version: 0.1.0
     repository: "file://../chart-web"
   - name: istio
-    version: 0.1.0
+    version: 0.1.1
     repository: "file://../chart-istio"
   - name: secrets
     version: 0.1.0

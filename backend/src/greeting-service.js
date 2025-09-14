@@ -1,4 +1,4 @@
-const makeRedisWrapper = require('./redis-wrapper.js');
+const makeRedisWrapper = require('./redis/redis-wrapper.js');
 
 const DEFAULT_TTL = Number(process.env.GREETINGS_TTL) || 30; // 30 seconds default
 // Create a namespaced wrapper once

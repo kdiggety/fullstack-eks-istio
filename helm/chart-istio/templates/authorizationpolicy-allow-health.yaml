@@ -1,0 +1,16 @@
+{{- if .Values.auth.enabled }}
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-allow-health
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: api
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/health"]
+{{- end }}

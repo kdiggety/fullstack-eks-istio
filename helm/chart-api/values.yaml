@@ -12,3 +12,5 @@ service:
 readinessPath: /api/health
 livenessPath: /api/health
 containerPort: 3000
+
+envSecretName: api-env

@@ -1,0 +1,27 @@
+{{- if .Values.auth.enabled }}
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-require-google-idtoken
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: api
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            requestPrincipals: ["*"]   # must have a validated JWT from RequestAuthentication
+      when:
+        - key: request.auth.claims[aud]
+          values:
+            - {{ required "istio.auth.google.clientId (audience) is required" .Values.auth.google.clientId | quote }}
+{{- if .Values.auth.google.hostedDomains }}
+        - key: request.auth.claims[hd]
+          values:
+{{- range .Values.auth.google.hostedDomains }}
+            - {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
