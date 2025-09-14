@@ -1,28 +1,15 @@
-// src/routes.js (CommonJS)
 const { Router } = require('express');
 const { getGreeting, setGreeting } = require('./greeting-service');
-const jwt = require('jsonwebtoken');
+const requireIdToken = require("./auth/verifyIdToken");
 
 const r = Router();
-
-const requireJwt = (req, res, next) => {
-  const hdr = req.headers.authorization || '';
-  const m = hdr.match(/^Bearer (.+)$/);
-  if (!m) return res.status(401).json({ error: 'missing bearer token' });
-  try {
-    req.user = jwt.verify(m[1], process.env.JWT_SECRET); // uses your K8s secret
-    return next();
-  } catch (e) {
-    return res.status(401).json({ error: 'invalid token' });
-  }
-};
 
 // Health check
 r.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'api', ts: Date.now() });
 });
 
-r.get('/secure/ping', requireJwt, (req, res) => {
+r.get('/secure/ping', requireIdToken, (req, res) => {
   res.json({ ok: true, user: { sub: req.user.sub } });
 });
 
