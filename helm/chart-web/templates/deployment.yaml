@@ -16,11 +16,17 @@ spec:
       labels:
         app: web
         app.kubernetes.io/name: {{ .Chart.Name }}
+      annotations:
+        # Rollout whenever runtime config changes
+        checksum/config: {{ printf "GOOGLE_CLIENT_ID=%s\nAPI_BASE=%s\n" (.Values.runtimeConfig.googleClientId | toString) ((.Values.runtimeConfig.apiBase | default "/api") | toString) | sha256sum }}
     spec:
       volumes:
         - name: runtime-config
           configMap:
             name: {{ include "web.fullname" . }}-runtime-config
+            items:
+              - key: config.js
+                path: config.js
       containers:
         - name: web
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -40,7 +46,9 @@ spec:
               port: {{ .Values.containerPort }}
             initialDelaySeconds: 10
             periodSeconds: 10
-          volumes:
+          volumeMounts:
             - name: runtime-config
-              configMap:
-                name: {{ include "web.fullname" . }}-runtime-config
+              mountPath: /usr/share/nginx/html/config.js
+              subPath: config.js
+              readOnly: true
+

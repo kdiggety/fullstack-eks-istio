@@ -4,7 +4,7 @@ dependencies:
   version: 0.1.1
 - name: web
   repository: file://../chart-web
-  version: 0.1.0
+  version: 0.3.0
 - name: istio
   repository: file://../chart-istio
   version: 0.1.1
@@ -14,5 +14,5 @@ dependencies:
 - name: redis
   repository: https://charts.bitnami.com/bitnami
   version: 19.5.5
-digest: sha256:24deb87f9d8a9e1dd8a3a37cdbf375f878e475b2cee7ca213e03984becd6d2ae
-generated: "2025-09-14T14:48:14.01195-07:00"
+digest: sha256:34a0ae8b4f2a8f24144c2201080ea69c3af7af07d8eda529aa491d6d29ceed40
+generated: "2025-09-15T21:44:10.701983-07:00"
