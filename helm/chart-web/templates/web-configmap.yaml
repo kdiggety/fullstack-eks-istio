@@ -7,5 +7,5 @@ data:
   config.js: |
     window.__CONFIG = {
       GOOGLE_CLIENT_ID: "{{ .Values.runtimeConfig.googleClientId }}",
-      API_BASE: "{{ .Values.runtimeConfig.apiBase }}"
+      API_BASE: "{{ .Values.runtimeConfig.apiBasea| default "/api" }}"
     };
