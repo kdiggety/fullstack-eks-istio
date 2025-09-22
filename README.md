@@ -63,12 +63,12 @@ This runner must be running on the same machine that has Docker/Kubernetes insta
 3. Configure the runner:
    ```bash
    ./config.sh --url https://github.com/<your-username>/<your-repo>                --token <REGISTRATION_TOKEN>
+   --name my-runner
+   --labels self-hosted,local-k8s
    ```
    > The token is generated in the GitHub UI when you click “New self-hosted runner”.
 
-4. Add a custom label during setup, e.g. `local-k8s`.  
-
-5. (Optional) Install as a service so it runs in the background:
+4. (Optional) Install as a service so it runs in the background:
    ```bash
    sudo ./svc.sh install
    sudo ./svc.sh start
