@@ -68,6 +68,25 @@ jobs:
           echo "GHCR token endpoint returned: $code"
           test "$code" = "200"
 
+      # Ensure QEMU (multi-arch) – optional, but harmless
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+ 
+      # ✅ Set up buildx (this creates an isolated builder for the job)
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true            # makes `docker buildx` available in PATH
+          driver: docker-container # most reliable on self-hosted runners
+          use: true                # select this builder for subsequent steps
+      
+      # (Optional) show buildx info for debugging
+      - name: Buildx version & ls
+        run: |
+          docker buildx version
+          docker buildx ls
+
       - name: Build & Push api image
         uses: docker/build-push-action@v6
         with:
