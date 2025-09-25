@@ -37,7 +37,7 @@ redis:
 # -----------------------------------------------------------------------------
 api:
   image:
-    repository: sample-api
+    repository: ghcr.io/kdiggety/api
     tag: dev
     pullPolicy: IfNotPresent
   replicaCount: 1
@@ -73,7 +73,7 @@ api:
 # -----------------------------------------------------------------------------
 web:
   image:
-    repository: sample-frontend
+    repository: ghcr.io/kdiggety/web
     tag: dev
     pullPolicy: IfNotPresent
   replicaCount: 1

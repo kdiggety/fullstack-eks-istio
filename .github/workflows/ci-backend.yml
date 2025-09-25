@@ -6,11 +6,20 @@ on:
   push:
     branches: [main]
     paths: ["backend/**"]
-    tags: ['v*.*.*']   # ← build on releases too
+    tags: ['v*.*.*']   # build on releases too
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # <-- required to push to GHCR
 
 jobs:
   test-and-build:
     runs-on: [self-hosted, local-k8s]
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/api
+      TAG: ${{ github.sha }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,43 +29,50 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: "${{ github.workspace }}/backend/package-lock.json"
+          cache-dependency-path: "backend/package-lock.json"
 
       - name: Install deps
         run: npm ci
-        working-directory: "${{ github.workspace }}/backend"
+        working-directory: backend
 
       - name: Test
         run: npm test -- --ci
-        working-directory: "${{ github.workspace }}/backend"
+        working-directory: backend
 
-      - name: Compute image tag
-        id: vars
-        shell: bash
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push api image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:dev
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      - name: Also tag with release tag (if present)
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          echo "SHA_TAG=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          docker buildx imagetools create \
+            --tag $IMAGE:${GITHUB_REF_NAME} \
+            $IMAGE:$TAG
+
+      - name: Show pushed image refs
+        run: |
+          echo "Pushed:"
+          echo "  $IMAGE:$TAG"
+          echo "  $IMAGE:dev"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "RELEASE_TAG=" >> "$GITHUB_OUTPUT"
+            echo "  $IMAGE:${GITHUB_REF_NAME}"
           fi
 
-      - name: Build local Docker image (SHA tag)
-        run: docker build -t "sample-api:${{ steps.vars.outputs.SHA_TAG }}" "${{ github.workspace }}/backend"
-
-      - name: Also tag image with release tag (if present)
-        if: ${{ steps.vars.outputs.RELEASE_TAG != '' }}
-        run: docker tag "sample-api:${{ steps.vars.outputs.SHA_TAG }}" "sample-api:${{ steps.vars.outputs.RELEASE_TAG }}"
-
-      - name: Load images into minikube (if present)
-        shell: bash
-        run: |
-          if command -v minikube >/dev/null 2>&1; then
-            minikube image load "sample-api:${{ steps.vars.outputs.SHA_TAG }}"
-            if [ -n "${{ steps.vars.outputs.RELEASE_TAG }}" ]; then
-              minikube image load "sample-api:${{ steps.vars.outputs.RELEASE_TAG }}"
-            fi
-          fi
-
-      - name: Show built image
-        run: docker images | grep sample-api || true
