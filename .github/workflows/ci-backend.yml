@@ -5,7 +5,10 @@ on:
     paths: ["backend/**"]
   push:
     branches: [main]
-    paths: ["backend/**"]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/api-build-push.yml'
+      - 'backend/Dockerfile'
     tags: ['v*.*.*']   # build on releases too
   workflow_dispatch:
 
