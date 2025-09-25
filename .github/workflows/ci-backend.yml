@@ -9,12 +9,12 @@ on:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
       - 'backend/Dockerfile'
-    tags: ['v*.*.*']   # build on releases too
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write   # <-- required to push to GHCR
+  packages: write
 
 jobs:
   test-and-build:
@@ -22,46 +22,39 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/api
       TAG: ${{ github.sha }}
+      DOCKER_CONFIG: ${{ runner.temp }}/.docker   # <<< isolates docker creds for this job
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: "backend/package-lock.json"
 
-      - name: Install deps
-        run: npm ci
+      - run: npm ci
         working-directory: backend
 
-      - name: Test
-        run: npm test -- --ci
+      - run: npm test -- --ci
         working-directory: backend
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Check token can request push scope
-        run: |
-          set -euo pipefail
-          echo "OWNER=${{ github.repository_owner }}"
-          # Expect 200 here (403 would mean the token lacks packages:write)
-          code=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://ghcr.io/token?service=ghcr.io&scope=repository:${{ github.repository_owner }}/api:push,pull")
-          echo "GHCR token endpoint returned: $code"
-          test "$code" = "200"
-
+      # Fresh login written into our isolated DOCKER_CONFIG
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ github.repository_owner }}   # resolves to 'kdiggety'
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # (Optional) quick prove we are using the isolated config
+      - name: Show docker config dir
+        run: |
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG"
+          ls -la "$DOCKER_CONFIG" || true
+          cat "$DOCKER_CONFIG/config.json" || true
 
       - name: Build & Push api image
         uses: docker/build-push-action@v6
@@ -74,19 +67,17 @@ jobs:
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
-      - name: Also tag with release tag (if present)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # (Optional) create a short tag too (handy for manual pulls)
+      - name: Tag short SHA
         run: |
+          SHORT=${GITHUB_SHA::12}
           docker buildx imagetools create \
-            --tag $IMAGE:${GITHUB_REF_NAME} \
-            $IMAGE:$TAG
+            --tag "${IMAGE}:${SHORT}" \
+            "${IMAGE}:${TAG}"
 
-      - name: Show pushed image refs
+      # (Optional) list tags to confirm push worked (requires pull scope)
+      - name: List tags (best-effort)
         run: |
-          echo "Pushed:"
-          echo "  $IMAGE:$TAG"
-          echo "  $IMAGE:dev"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "  $IMAGE:${GITHUB_REF_NAME}"
-          fi
-
+          echo "IMAGE=${IMAGE}"
+          # GHCR tag listing is a bit picky; this often works if the package exists
+          curl -sL "https://ghcr.io/v2/${{ github.repository_owner }}/api/tags/list" | head -n 40 || true
