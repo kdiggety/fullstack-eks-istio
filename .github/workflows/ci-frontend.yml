@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
-      - '.github/workflows/web-build-push.yml'   # ensure edits to the workflow run it
+      - '.github/workflows/ci-frontend.yml'   # ensure edits to the workflow run it
       - 'frontend/Dockerfile'                    # if you keep a service-specific Dockerfile
     tags: ['v*.*.*']   # build on releases too
   workflow_dispatch:
