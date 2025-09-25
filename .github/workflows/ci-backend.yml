@@ -9,9 +9,10 @@ on:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
       - 'backend/Dockerfile'
-    tags: ['v*.*.*']
+    tags: ['v*.*.*']   # build on releases too
   workflow_dispatch:
 
+# 👇 Required so GITHUB_TOKEN can push to GHCR
 permissions:
   contents: read
   packages: write
@@ -22,26 +23,35 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/api
       TAG: ${{ github.sha }}
-      DOCKER_CONFIG: ${{ runner.temp }}/.docker   # <<< isolates docker creds for this job
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: "backend/package-lock.json"
 
-      - run: npm ci
+      - name: Install deps
+        run: npm ci
         working-directory: backend
 
-      - run: npm test -- --ci
+      - name: Test
+        run: npm test -- --ci
         working-directory: backend
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # Fresh login written into our isolated DOCKER_CONFIG
+      # 👇 Isolate Docker auth for this job to avoid stale creds on self-hosted runners
+      - name: Isolate Docker config for this job
+        run: |
+          mkdir -p "$RUNNER_TEMP/.docker"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/.docker" >> "$GITHUB_ENV"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -49,12 +59,14 @@ jobs:
           username: ${{ github.repository_owner }}   # resolves to 'kdiggety'
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # (Optional) quick prove we are using the isolated config
-      - name: Show docker config dir
+      # (Optional) quick scope check — should print 200
+      - name: Verify GHCR token scope
         run: |
-          echo "DOCKER_CONFIG=$DOCKER_CONFIG"
-          ls -la "$DOCKER_CONFIG" || true
-          cat "$DOCKER_CONFIG/config.json" || true
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:${{ github.repository_owner }}/api:push,pull")
+          echo "GHCR token endpoint returned: $code"
+          test "$code" = "200"
 
       - name: Build & Push api image
         uses: docker/build-push-action@v6
@@ -62,22 +74,31 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:${{ env.TAG }}   # full SHA
             ${{ env.IMAGE }}:dev
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
-      # (Optional) create a short tag too (handy for manual pulls)
-      - name: Tag short SHA
-        run: |
-          SHORT=${GITHUB_SHA::12}
-          docker buildx imagetools create \
-            --tag "${IMAGE}:${SHORT}" \
-            "${IMAGE}:${TAG}"
+      # (Optional) also tag a short SHA for convenience; uncomment to enable
+      # - name: Tag short SHA
+      #   run: |
+      #     SHORT=${GITHUB_SHA::12}
+      #     docker buildx imagetools create \
+      #       --tag "${IMAGE}:${SHORT}" \
+      #       "${IMAGE}:${TAG}"
 
-      # (Optional) list tags to confirm push worked (requires pull scope)
-      - name: List tags (best-effort)
+      - name: Also tag with release tag (if present)
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          echo "IMAGE=${IMAGE}"
-          # GHCR tag listing is a bit picky; this often works if the package exists
-          curl -sL "https://ghcr.io/v2/${{ github.repository_owner }}/api/tags/list" | head -n 40 || true
+          docker buildx imagetools create \
+            --tag "$IMAGE:${GITHUB_REF_NAME}" \
+            "$IMAGE:$TAG"
+
+      - name: Show pushed image refs
+        run: |
+          echo "Pushed:"
+          echo "  $IMAGE:$TAG"
+          echo "  $IMAGE:dev"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "  $IMAGE:${GITHUB_REF_NAME}"
+          fi
