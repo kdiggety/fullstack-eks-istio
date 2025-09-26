@@ -86,7 +86,7 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG }}   # full SHA
+            ${{ env.IMAGE }}:${{ env.TAG }}
             ${{ env.IMAGE }}:dev
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
