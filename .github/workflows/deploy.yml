@@ -85,25 +85,32 @@ jobs:
             --docker-password="$GHCR_TOKEN"
           echo "Created $SECRET_NAME in namespace $NAMESPACE"
 
-      - name: Patch default ServiceAccount to use ghcr-pull
+      - name: Attach GHCR pull secret to default SA
         shell: bash
+        env:
+          SECRET_NAME: ghcr-pull
         run: |
           set -euo pipefail
-          SECRET_NAME=ghcr-pull
-          # Ensure SA exists (it always does) and attach imagePullSecrets
+      
+          # Ensure the ServiceAccount exists
+          kubectl -n "$NAMESPACE" get sa default >/dev/null 2>&1 || \
+            kubectl -n "$NAMESPACE" create sa default
+      
+          # Try a simple strategic-merge patch first
           kubectl -n "$NAMESPACE" patch serviceaccount default \
             --type merge \
-            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}" || {
-              echo "Patch failed; falling back to kubectl apply"
-              cat <<EOF | kubectl -n "$NAMESPACE" apply -f -
-              apiVersion: v1
-              kind: ServiceAccount
-              metadata:
-                name: default
-              imagePullSecrets:
-                - name: ${SECRET_NAME}
-              EOF
-            }
+            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}" || true
+      
+          # If imagePullSecrets is still empty/missing, do a JSONPatch add/replace without heredocs
+          CURRENT=$(kubectl -n "$NAMESPACE" get sa default -o jsonpath='{.imagePullSecrets[*].name}' || true)
+          if [ -z "$CURRENT" ]; then
+            JSON_ADD='[{"op":"add","path":"\/imagePullSecrets","value":[{"name":"'"${SECRET_NAME}"'"}]}]'
+            kubectl -n "$NAMESPACE" patch serviceaccount default --type json -p "$JSON_ADD"
+          else
+            JSON_REPLACE='[{"op":"replace","path":"\/imagePullSecrets","value":[{"name":"'"${SECRET_NAME}"'"}]}]'
+            kubectl -n "$NAMESPACE" patch serviceaccount default --type json -p "$JSON_REPLACE"
+          fi
+      
           echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
 
       - name: Add helm repos
