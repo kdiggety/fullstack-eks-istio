@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read   # optional GHCR secret creation step
 
 jobs:
   deploy:
@@ -24,6 +25,7 @@ jobs:
       NAMESPACE: sample
       WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/web
       API_IMAGE: ghcr.io/${{ github.repository_owner }}/api
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,8 +56,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          kubectl get ns "$NAMESPACE" || kubectl create ns "$NAMESPACE"
+          kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
+
+      # Optional: create/refresh imagePullSecret for private GHCR images.
+      # Provide repo/org secrets: GHCR_USERNAME (your GH username) and GHCR_TOKEN (PAT with read:packages).
+      - name: Ensure GHCR imagePullSecret (optional)
+        shell: bash
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || '' }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; then
+            echo "GHCR credentials not provided; skipping imagePullSecret creation."
+            exit 0
+          fi
+          SECRET_NAME=ghcr-pull
+          kubectl -n "$NAMESPACE" delete secret "$SECRET_NAME" >/dev/null 2>&1 || true
+          kubectl -n "$NAMESPACE" create secret docker-registry "$SECRET_NAME" \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USERNAME" \
+            --docker-password="$GHCR_TOKEN"
+          echo "Created secret $SECRET_NAME in namespace $NAMESPACE"
+          # If your chart supports imagePullSecrets, wire it in values.yaml or add:
+          #   --set imagePullSecrets[0].name=$SECRET_NAME
+          # to the helm commands below.
 
       - name: Add helm repos
         shell: bash
