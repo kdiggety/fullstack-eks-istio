@@ -43,15 +43,6 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # ✅ Single buildx setup
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-          driver: docker-container
-          use: true
-
       # Isolate Docker auth for this job (avoids stale creds on self-hosted runners)
       - name: Isolate Docker config for this job
         run: |
@@ -73,6 +64,15 @@ jobs:
             "https://ghcr.io/token?service=ghcr.io&scope=repository:${{ github.repository_owner }}/api:push,pull")
           echo "GHCR token endpoint returned: $code"
           test "$code" = "200"
+
+      # ✅ Single buildx setup
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver: docker-container
+          use: true
 
       # (Optional) show buildx info
       - name: Buildx version & ls
