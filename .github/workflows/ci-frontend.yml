@@ -6,15 +6,20 @@ on:
   push:
     branches: [main]
     paths:
-      - 'frontend/**'
-      - '.github/workflows/ci-frontend.yml'   # ensure edits to the workflow run it
-      - 'frontend/Dockerfile'                    # if you keep a service-specific Dockerfile
-    tags: ['v*.*.*']   # build on releases too
+      - "frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+      - "frontend/Dockerfile"
+    tags: ["v*.*.*"]   # build on releases too
   workflow_dispatch:
 
+# Needed so login-action can push to GHCR from Actions
 permissions:
   contents: read
-  packages: write   # <-- required to push to GHCR
+  packages: write
+
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -31,20 +36,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "frontend/package-lock.json"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install deps
-        run: npm ci
         working-directory: frontend
+        run: npm ci
 
       - name: Build (Vite)
-        # NOTE: do NOT pass API base here; runtime config comes from /config.js
-        run: npm run build
+        # NOTE: API base is resolved at runtime (e.g., /config.js), not baked here
         working-directory: frontend
+        run: npm run build
+
+      # Optional: keep the built site as an artifact for quick preview / debugging
+      - name: Upload dist artifact
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: frontend/dist
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Set release tag (if this is a semver tag)
         id: rel
+        shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -60,14 +76,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # If you still need a build-arg for local experiments, uncomment "build-args".
       - name: Build & Push web image
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
-          # build-args: |
-          #   VITE_API_BASE_URL=${{ secrets.FRONTEND_API_BASE_URL }}
           tags: |
             ${{ env.IMAGE }}:${{ env.TAG }}
             ${{ env.IMAGE }}:dev
@@ -80,4 +93,3 @@ jobs:
           docker buildx imagetools create \
             --tag $IMAGE:${{ steps.rel.outputs.RELEASE_TAG }} \
             $IMAGE:$TAG
-
