@@ -3,7 +3,7 @@ name: Deploy Local K8s (Umbrella Helm)
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*.*.*' ]   # deploy on release tags too
+    tags: [ 'v*.*.*' ]
   workflow_dispatch:
     inputs:
       tag:
@@ -16,7 +16,7 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read   # optional GHCR secret creation step
+  packages: read
 
 jobs:
   deploy:
@@ -40,7 +40,7 @@ jobs:
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF_NAME}"
           else
-            TAG="${GITHUB_SHA}"      # match CI push tag exactly
+            TAG="${GITHUB_SHA}"
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
           echo "Using image tag: $TAG"
@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           kubectl config current-context
-          kubectl get nodes
+          kubectl get nodes -o wide
 
       - name: Ensure namespace & sidecar injection
         shell: bash
@@ -59,29 +59,52 @@ jobs:
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      # Optional: create/refresh imagePullSecret for private GHCR images.
-      # Provide repo/org secrets: GHCR_USERNAME (your GH username) and GHCR_TOKEN (PAT with read:packages).
-      - name: Ensure GHCR imagePullSecret (optional)
+      # === GHCR PULL SECRET FIXES ===
+      # Provide repo/org secrets:
+      #   GHCR_USERNAME = your GitHub username (or org/service user that can read the packages)
+      #   GHCR_TOKEN    = PAT with at least "read:packages" (and "read:org" if packages are in an org)
+      - name: Create/refresh ghcr-pull secret
         shell: bash
         env:
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || '' }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || '' }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; then
-            echo "GHCR credentials not provided; skipping imagePullSecret creation."
-            exit 0
+
+          if [ -z "${GHCR_USERNAME:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
+            echo "::error::GHCR_USERNAME / GHCR_TOKEN not provided. Add repo/org secrets with a PAT that has read:packages."
+            exit 1
           fi
+
           SECRET_NAME=ghcr-pull
+          # Recreate the secret to ensure fresh creds
           kubectl -n "$NAMESPACE" delete secret "$SECRET_NAME" >/dev/null 2>&1 || true
           kubectl -n "$NAMESPACE" create secret docker-registry "$SECRET_NAME" \
             --docker-server=ghcr.io \
             --docker-username="$GHCR_USERNAME" \
             --docker-password="$GHCR_TOKEN"
-          echo "Created secret $SECRET_NAME in namespace $NAMESPACE"
-          # If your chart supports imagePullSecrets, wire it in values.yaml or add:
-          #   --set imagePullSecrets[0].name=$SECRET_NAME
-          # to the helm commands below.
+          echo "Created $SECRET_NAME in namespace $NAMESPACE"
+
+      - name: Patch default ServiceAccount to use ghcr-pull
+        shell: bash
+        run: |
+          set -euo pipefail
+          SECRET_NAME=ghcr-pull
+          # Ensure SA exists (it always does) and attach imagePullSecrets
+          kubectl -n "$NAMESPACE" patch serviceaccount default \
+            --type merge \
+            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}" || {
+              echo "Patch failed; falling back to kubectl apply"
+              cat <<EOF | kubectl -n "$NAMESPACE" apply -f -
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: default
+              imagePullSecrets:
+                - name: ${SECRET_NAME}
+              EOF
+            }
+          echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
 
       - name: Add helm repos
         shell: bash
@@ -94,12 +117,13 @@ jobs:
         shell: bash
         run: helm dependency build "./helm/chart"
 
-      - name: Helm upgrade (use GHCR images + resolved tag)
+      - name: Helm upgrade (use GHCR images + resolved tag + imagePullSecrets)
         shell: bash
         env:
           TAG: ${{ steps.vars.outputs.TAG }}
         run: |
           set -euo pipefail
+          SECRET_NAME=ghcr-pull
 
           echo "Rendering (dry-run) to sanity-check values..."
           helm upgrade --install fullstack "./helm/chart" -n "$NAMESPACE" \
@@ -108,6 +132,8 @@ jobs:
             --set web.image.tag="$TAG" \
             --set api.image.repository="$API_IMAGE" \
             --set api.image.tag="$TAG" \
+            --set web.imagePullSecrets[0].name="$SECRET_NAME" \
+            --set api.imagePullSecrets[0].name="$SECRET_NAME" \
             >/dev/null
 
           echo "Applying release..."
@@ -117,7 +143,9 @@ jobs:
             --set web.image.repository="$WEB_IMAGE" \
             --set web.image.tag="$TAG" \
             --set api.image.repository="$API_IMAGE" \
-            --set api.image.tag="$TAG"
+            --set api.image.tag="$TAG" \
+            --set web.imagePullSecrets[0].name="$SECRET_NAME" \
+            --set api.imagePullSecrets[0].name="$SECRET_NAME"
 
       - name: Wait for rollouts
         shell: bash
@@ -132,11 +160,9 @@ jobs:
         run: |
           set -euo pipefail
           kubectl -n istio-system get svc istio-ingressgateway
-
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
 
-          # wait for port-forward
           if command -v nc >/dev/null 2>&1; then
             for i in {1..20}; do nc -z localhost 8080 && break || sleep 0.5; done
           else
