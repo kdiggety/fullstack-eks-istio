@@ -3,7 +3,7 @@ name: Deploy Local K8s (Umbrella Helm)
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*.*.*' ]   # deploy on release tags too
+    tags: [ 'v*.*.*' ]
   workflow_dispatch:
     inputs:
       tag:
@@ -16,7 +16,7 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read   # allows pulling from GHCR via GITHUB_TOKEN if needed
+  packages: read   # allows registry read if using GITHUB_TOKEN in this job (not required)
 
 jobs:
   deploy:
@@ -30,7 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve image tag (prefer input → release tag → full SHA)
+      - name: Resolve base tag (prefer input → release tag → full SHA)
         id: vars
         shell: bash
         run: |
@@ -43,7 +43,7 @@ jobs:
             TAG="${GITHUB_SHA}"
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Using image tag: $TAG"
+          echo "Using base image tag: $TAG"
 
       - name: Show cluster context
         shell: bash
@@ -59,7 +59,7 @@ jobs:
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      # Create/refresh imagePullSecret for private GHCR images and attach to default SA.
+      # Optional: create/refresh imagePullSecret for private GHCR images and attach to default SA.
       # Provide repo/org secrets GHCR_USERNAME (your GitHub username) and GHCR_TOKEN (PAT with read:packages).
       - name: Ensure GHCR imagePullSecret and patch default SA
         shell: bash
@@ -69,23 +69,19 @@ jobs:
           SECRET_NAME: ghcr-pull
         run: |
           set -euo pipefail
-          if [ -z "${GHCR_USERNAME:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
-            echo "GHCR credentials not provided; skipping imagePullSecret creation."
-          else
+          if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
             kubectl -n "$NAMESPACE" delete secret "$SECRET_NAME" >/dev/null 2>&1 || true
             kubectl -n "$NAMESPACE" create secret docker-registry "$SECRET_NAME" \
               --docker-server=ghcr.io \
               --docker-username="$GHCR_USERNAME" \
               --docker-password="$GHCR_TOKEN"
             echo "Created/updated secret $SECRET_NAME in namespace $NAMESPACE"
+          else
+            echo "GHCR credentials not provided; skipping imagePullSecret creation."
           fi
 
-          # Ensure the ServiceAccount exists (it always does) and attach imagePullSecrets
           kubectl -n "$NAMESPACE" get sa default >/dev/null 2>&1 || kubectl -n "$NAMESPACE" create sa default
-
-          # Strategic-merge patch; ignore errors and fix up with JSONPatch if needed
-          kubectl -n "$NAMESPACE" patch serviceaccount default \
-            --type merge \
+          kubectl -n "$NAMESPACE" patch serviceaccount default --type merge \
             -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}" || true
 
           CURRENT="$(kubectl -n "$NAMESPACE" get sa default -o jsonpath='{.imagePullSecrets[*].name}' || true)"
@@ -96,8 +92,48 @@ jobs:
             kubectl -n "$NAMESPACE" patch serviceaccount default --type json \
               -p '[{"op":"replace","path":"/imagePullSecrets","value":[{"name":"'"${SECRET_NAME}"'"}]}]'
           fi
-
           echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
+
+      - name: (Optional) GHCR login for tag checks
+        if: ${{ secrets.GHCR_USERNAME != '' && secrets.GHCR_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Resolve per-service tags (fall back to :dev if base tag not found)
+        id: img
+        shell: bash
+        env:
+          TAG: ${{ steps.vars.outputs.TAG }}
+        run: |
+          set -euo pipefail
+
+          check_tag() {
+            local ref="$1:$2"
+            if docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
+              echo "FOUND"
+            else
+              echo "MISSING"
+            fi
+          }
+
+          WEB_TAG="$TAG"
+          API_TAG="$TAG"
+
+          if [ "$(check_tag "$WEB_IMAGE" "$WEB_TAG")" = "MISSING" ]; then
+            echo "Web image tag '$WEB_TAG' not found; falling back to 'dev'."
+            WEB_TAG="dev"
+          fi
+          if [ "$(check_tag "$API_IMAGE" "$API_TAG")" = "MISSING" ]; then
+            echo "API image tag '$API_TAG' not found; falling back to 'dev'."
+            API_TAG="dev"
+          fi
+
+          echo "WEB_TAG=$WEB_TAG" >> "$GITHUB_OUTPUT"
+          echo "API_TAG=$API_TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tags → web: $WEB_TAG, api: $API_TAG"
 
       - name: Add helm repos
         shell: bash
@@ -110,10 +146,11 @@ jobs:
         shell: bash
         run: helm dependency build "./helm/chart"
 
-      - name: Helm upgrade (use GHCR images + resolved tag)
+      - name: Helm upgrade (use GHCR images + resolved per-service tags)
         shell: bash
         env:
-          TAG: ${{ steps.vars.outputs.TAG }}
+          WEB_TAG: ${{ steps.img.outputs.WEB_TAG }}
+          API_TAG: ${{ steps.img.outputs.API_TAG }}
         run: |
           set -euo pipefail
 
@@ -121,9 +158,9 @@ jobs:
           helm upgrade --install fullstack "./helm/chart" -n "$NAMESPACE" \
             --dry-run --debug \
             --set web.image.repository="$WEB_IMAGE" \
-            --set web.image.tag="$TAG" \
+            --set web.image.tag="$WEB_TAG" \
             --set api.image.repository="$API_IMAGE" \
-            --set api.image.tag="$TAG" \
+            --set api.image.tag="$API_TAG" \
             >/dev/null
 
           echo "Applying release..."
@@ -131,9 +168,9 @@ jobs:
             --namespace "$NAMESPACE" --create-namespace \
             --dependency-update \
             --set web.image.repository="$WEB_IMAGE" \
-            --set web.image.tag="$TAG" \
+            --set web.image.tag="$WEB_TAG" \
             --set api.image.repository="$API_IMAGE" \
-            --set api.image.tag="$TAG"
+            --set api.image.tag="$API_TAG"
 
       - name: Wait for rollouts
         shell: bash
@@ -152,7 +189,6 @@ jobs:
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
 
-          # wait for port-forward
           if command -v nc >/dev/null 2>&1; then
             for i in {1..20}; do nc -z localhost 8080 && break || sleep 0.5; done
           else
