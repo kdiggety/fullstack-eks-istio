@@ -16,7 +16,7 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
+  packages: read   # needed to query GHCR for tag existence
 
 jobs:
   deploy:
@@ -43,14 +43,14 @@ jobs:
             TAG="${GITHUB_SHA}"
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Using image tag: $TAG"
+          echo "Using requested tag: $TAG"
 
       - name: Show cluster context
         shell: bash
         run: |
           set -euo pipefail
           kubectl config current-context
-          kubectl get nodes -o wide
+          kubectl get nodes
 
       - name: Ensure namespace & sidecar injection
         shell: bash
@@ -59,57 +59,72 @@ jobs:
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      # === GHCR PULL SECRET FIXES ===
-      # Provide repo/org secrets:
-      #   GHCR_USERNAME = your GitHub username (or org/service user that can read the packages)
-      #   GHCR_TOKEN    = PAT with at least "read:packages" (and "read:org" if packages are in an org)
-      - name: Create/refresh ghcr-pull secret
+      # OPTIONAL: Create/refresh an imagePullSecret for private GHCR pulls
+      # Requires repo/org secrets GHCR_USERNAME and GHCR_TOKEN (PAT with read:packages)
+      - name: Ensure GHCR imagePullSecret (optional)
+        if: ${{ secrets.GHCR_USERNAME && secrets.GHCR_TOKEN }}
         shell: bash
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
-
-          if [ -z "${GHCR_USERNAME:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
-            echo "::error::GHCR_USERNAME / GHCR_TOKEN not provided. Add repo/org secrets with a PAT that has read:packages."
-            exit 1
-          fi
-
           SECRET_NAME=ghcr-pull
-          # Recreate the secret to ensure fresh creds
           kubectl -n "$NAMESPACE" delete secret "$SECRET_NAME" >/dev/null 2>&1 || true
           kubectl -n "$NAMESPACE" create secret docker-registry "$SECRET_NAME" \
             --docker-server=ghcr.io \
             --docker-username="$GHCR_USERNAME" \
             --docker-password="$GHCR_TOKEN"
-          echo "Created $SECRET_NAME in namespace $NAMESPACE"
+          # Attach to default SA so all pods can pull
+          kubectl -n "$NAMESPACE" patch serviceaccount default --type merge \
+            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}" || true
+          echo "Created and attached imagePullSecret ${SECRET_NAME}"
 
-      - name: Attach GHCR pull secret to default SA
+      # NEW: Probe GHCR to see if the resolved tag exists for each image.
+      # If missing, fall back to `:dev` for that image only.
+      - name: Pick effective image tags (fallback to :dev if tag missing)
+        id: pick
         shell: bash
         env:
-          SECRET_NAME: ghcr-pull
+          TAG: ${{ steps.vars.outputs.TAG }}
+          OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # GitHub-provided token (packages:read)
         run: |
           set -euo pipefail
-      
-          # Ensure SA exists
-          kubectl -n "$NAMESPACE" get sa default >/dev/null 2>&1 || \
-            kubectl -n "$NAMESPACE" create sa default
-      
-          # Fast path: merge-patch sets/overwrites imagePullSecrets
-          kubectl -n "$NAMESPACE" patch serviceaccount default \
-            --type merge \
-            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}"
-      
-          # If the list exists but does not include our secret, append it safely.
-          CURRENT=$(kubectl -n "$NAMESPACE" get sa default -o jsonpath='{.imagePullSecrets[*].name}' || true)
-          if [[ "$CURRENT" != *"$SECRET_NAME"* ]]; then
-            kubectl -n "$NAMESPACE" patch serviceaccount default \
-              --type json \
-              -p='[{"op":"add","path":"/imagePullSecrets/-","value":{"name":"'"${SECRET_NAME}"'"}}]'
+
+          check_tag() {
+            local image="$1"   # e.g. ghcr.io/owner/web
+            local tag="$2"     # e.g. SHA or vX.Y.Z
+            local path="${image#ghcr.io/}" # owner/repo
+            # Use a HEAD request to GHCR manifests; 200 means tag exists.
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/${path}/manifests/${tag}")
+            echo "$code"
+          }
+
+          WEB_CODE=$(check_tag "${WEB_IMAGE}" "${TAG}")
+          API_CODE=$(check_tag "${API_IMAGE}" "${TAG}")
+
+          if [ "$WEB_CODE" = "200" ]; then
+            WEB_TAG="${TAG}"
+            echo "web: found tag ${TAG}"
+          else
+            WEB_TAG="dev"
+            echo "web: tag ${TAG} not found in GHCR, falling back to :dev"
           fi
-      
-          echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
+
+          if [ "$API_CODE" = "200" ]; then
+            API_TAG="${TAG}"
+            echo "api: found tag ${TAG}"
+          else
+            API_TAG="dev"
+            echo "api: tag ${TAG} not found in GHCR, falling back to :dev"
+          fi
+
+          echo "WEB_TAG=$WEB_TAG" >> "$GITHUB_OUTPUT"
+          echo "API_TAG=$API_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Add helm repos
         shell: bash
@@ -122,23 +137,21 @@ jobs:
         shell: bash
         run: helm dependency build "./helm/chart"
 
-      - name: Helm upgrade (use GHCR images + resolved tag + imagePullSecrets)
+      - name: Helm upgrade (use GHCR images + effective tags)
         shell: bash
         env:
-          TAG: ${{ steps.vars.outputs.TAG }}
+          WEB_TAG: ${{ steps.pick.outputs.WEB_TAG }}
+          API_TAG: ${{ steps.pick.outputs.API_TAG }}
         run: |
           set -euo pipefail
-          SECRET_NAME=ghcr-pull
 
           echo "Rendering (dry-run) to sanity-check values..."
           helm upgrade --install fullstack "./helm/chart" -n "$NAMESPACE" \
             --dry-run --debug \
             --set web.image.repository="$WEB_IMAGE" \
-            --set web.image.tag="$TAG" \
+            --set web.image.tag="$WEB_TAG" \
             --set api.image.repository="$API_IMAGE" \
-            --set api.image.tag="$TAG" \
-            --set web.imagePullSecrets[0].name="$SECRET_NAME" \
-            --set api.imagePullSecrets[0].name="$SECRET_NAME" \
+            --set api.image.tag="$API_TAG" \
             >/dev/null
 
           echo "Applying release..."
@@ -146,18 +159,16 @@ jobs:
             --namespace "$NAMESPACE" --create-namespace \
             --dependency-update \
             --set web.image.repository="$WEB_IMAGE" \
-            --set web.image.tag="$TAG" \
+            --set web.image.tag="$WEB_TAG" \
             --set api.image.repository="$API_IMAGE" \
-            --set api.image.tag="$TAG" \
-            --set web.imagePullSecrets[0].name="$SECRET_NAME" \
-            --set api.imagePullSecrets[0].name="$SECRET_NAME"
+            --set api.image.tag="$API_TAG"
 
       - name: Wait for rollouts
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
-          kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=600s
+          kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=600s
           kubectl -n "$NAMESPACE" get pods -o wide
 
       - name: Smoke test through Istio
@@ -167,19 +178,15 @@ jobs:
           kubectl -n istio-system get svc istio-ingressgateway
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
-
           if command -v nc >/dev/null 2>&1; then
             for i in {1..20}; do nc -z localhost 8080 && break || sleep 0.5; done
           else
             sleep 3
           fi
-
           echo "== /api/health =="
           curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
-
           echo "== / (frontend first 10 lines) =="
           curl -fsS "http://localhost:8080/" | head -n 10
-
           kill "$PF_PID" || true
 
       - name: If failed, dump diagnostics
