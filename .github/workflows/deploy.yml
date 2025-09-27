@@ -113,6 +113,32 @@ jobs:
       
           echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
 
+      - name: Attach GHCR pull secret to default SA
+        shell: bash
+        env:
+          SECRET_NAME: ghcr-pull
+        run: |
+          set -euo pipefail
+      
+          # Ensure SA exists
+          kubectl -n "$NAMESPACE" get sa default >/dev/null 2>&1 || \
+            kubectl -n "$NAMESPACE" create sa default
+      
+          # Fast path: merge-patch sets/overwrites imagePullSecrets
+          kubectl -n "$NAMESPACE" patch serviceaccount default \
+            --type merge \
+            -p "{\"imagePullSecrets\":[{\"name\":\"${SECRET_NAME}\"}]}"
+      
+          # If the list exists but does not include our secret, append it safely.
+          CURRENT=$(kubectl -n "$NAMESPACE" get sa default -o jsonpath='{.imagePullSecrets[*].name}' || true)
+          if [[ "$CURRENT" != *"$SECRET_NAME"* ]]; then
+            kubectl -n "$NAMESPACE" patch serviceaccount default \
+              --type json \
+              -p='[{"op":"add","path":"/imagePullSecrets/-","value":{"name":"'"${SECRET_NAME}"'"}}]'
+          fi
+      
+          echo "Patched default ServiceAccount with imagePullSecret ${SECRET_NAME}"
+
       - name: Add helm repos
         shell: bash
         run: |
