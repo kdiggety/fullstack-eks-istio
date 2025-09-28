@@ -1,32 +1,81 @@
-// /config.js (RUNTIME SCRIPT; no imports/exports)
-// If you already set window.__CONFIG = { GOOGLE_CLIENT_ID, API_BASE, ... },
-// this file maps that legacy shape into the canonical window.__APP_CONFIG__.
-// Otherwise it uses safe defaults and the current origin to synthesize routes.
+// src/config.js  (ES module; exports getters that read window.__APP_CONFIG__)
+let _cached = null;
 
-(function () {
-  const legacy = (typeof window !== "undefined" && window.__CONFIG) ? window.__CONFIG : {};
-  const origin = (typeof window !== "undefined" && window.location && window.location.origin) ? window.location.origin : "";
+function _env() {
+  try { return import.meta?.env || {}; } catch { return {}; }
+}
+function _origin() {
+  if (typeof window !== "undefined" && window.location) return window.location.origin;
+  const env = _env();
+  return env.VITE_ORIGIN || "";
+}
 
-  // Minimal, harness-friendly shape
-  const cfg = {
-    oidc: {
-      issuer: "https://accounts.google.com",
-      clientId: legacy.GOOGLE_CLIENT_ID || "",        // fill via legacy or patched by main.jsx from Vite env
-      redirectUri: `${origin}/callback`,
-      postLogoutRedirectUri: `${origin}/`,
-    },
-    // Keep relative "/api" (works behind same-origin ingress); main.jsx can normalize
-    apiBase: legacy.API_BASE || "/api",
-  };
+function _readRuntime() {
+  const env = _env();
+  const w = (typeof window !== "undefined") ? window : undefined;
+  const runtime = (w && w.__APP_CONFIG__) ? w.__APP_CONFIG__ : {};
+  const legacy = (w && w.__CONFIG__) ? w.__CONFIG__ : {};
 
-  // Normalize trailing slashes (keep "/api" as-is)
-  if (typeof cfg.apiBase === "string" && cfg.apiBase !== "/") {
-    cfg.apiBase = cfg.apiBase.startsWith("/")
-      ? cfg.apiBase.replace(/\/+$/, "")
-      : cfg.apiBase.replace(/\/+$/, "");
+  const issuer =
+    runtime.oidc?.issuer ||
+    env.VITE_OIDC_ISSUER ||
+    "https://accounts.google.com";
+
+  const clientId =
+    runtime.oidc?.clientId ||
+    legacy.GOOGLE_CLIENT_ID ||
+    env.VITE_GOOGLE_CLIENT_ID ||
+    "";
+
+  const redirectUri =
+    runtime.oidc?.redirectUri ||
+    env.VITE_REDIRECT_URI ||
+    (_origin() ? `${_origin()}/callback` : "/callback");
+
+  const postLogoutRedirectUri =
+    runtime.oidc?.postLogoutRedirectUri ||
+    env.VITE_POST_LOGOUT_REDIRECT_URI ||
+    (_origin() ? `${_origin()}/` : "/");
+
+  let apiBase =
+    runtime.apiBase ||
+    legacy.API_BASE ||
+    env.VITE_API_BASE ||
+    "/api";
+
+  // Normalize apiBase (keep relative "/api" as-is)
+  if (typeof apiBase === "string" && apiBase !== "/") {
+    apiBase = apiBase.startsWith("/")
+      ? apiBase.replace(/\/+$/, "")
+      : apiBase.replace(/\/+$/, "");
   }
 
-  // Expose for the app + harness
-  window.__APP_CONFIG__ = cfg;
-})();
+  return {
+    oidc: { issuer, clientId, redirectUri, postLogoutRedirectUri },
+    apiBase,
+  };
+}
+
+// Call once after /config.js loads to capture the runtime values
+export function refreshAppConfig() {
+  _cached = _readRuntime();
+  // Ensure the global also reflects normalization (helps your harness)
+  if (typeof window !== "undefined") {
+    window.__APP_CONFIG__ = _cached;
+  }
+}
+
+// Lazy: if refresh wasn’t called yet, read on demand
+function _cfg() {
+  if (_cached) return _cached;
+  _cached = _readRuntime();
+  return _cached;
+}
+
+// === Public getters used around the app ===
+export function getIssuer() { return _cfg().oidc.issuer; }
+export function getClientId() { return _cfg().oidc.clientId; }
+export function getRedirectUri() { return _cfg().oidc.redirectUri; }
+export function getPostLogoutRedirectUri() { return _cfg().oidc.postLogoutRedirectUri; }
+export function getApiBase() { return _cfg().apiBase; }
 
