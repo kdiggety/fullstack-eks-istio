@@ -5,13 +5,13 @@ import AuthProvider from "./auth/AuthProvider";
 import App from "./App";
 
 // --- Load runtime /config.js BEFORE rendering React ---
-// NOTE: Keep /config.js served with: Content-Type: application/javascript; Cache-Control: no-store
+// Keep /config.js served with: Content-Type: application/javascript; Cache-Control: no-store
 async function loadRuntimeConfig() {
   // Avoid double-inject
   if (document.querySelector('script[data-app-config="true"]')) return true;
 
-  // Small cache-bust in case an intermediate proxy ignores no-store (dev only)
-  const devBust = process.env.NODE_ENV !== "production" ? `?t=${Date.now()}` : "";
+  // Tiny cache-bust in dev in case a proxy ignores no-store
+  const devBust = import.meta.env?.MODE !== "production" ? `?t=${Date.now()}` : "";
   const s = document.createElement("script");
   s.src = `/config.js${devBust}`;
   s.async = false; // ensure it executes before we continue
@@ -23,65 +23,68 @@ async function loadRuntimeConfig() {
     document.head.appendChild(s);
   });
 
-  // Normalize shapes so the app can rely on window.__APP_CONFIG__
-  normalizeRuntimeConfig();
-
-  // Final sanity check (warn but do not hard-block render)
-  validateRuntimeConfig();
+  // Normalize/patch the config with Vite env fallbacks
+  normalizeAndValidateConfig();
 
   return loaded;
 }
 
-function normalizeRuntimeConfig() {
-  const legacy = window.__CONFIG || {};             // current shape you have
-  const cfg = window.__APP_CONFIG__ || {};          // preferred shape
-
+function normalizeAndValidateConfig() {
   const origin = window.location.origin;
-  const ensured = {
-    // Preserve existing preferred shape if present
-    ...cfg,
-    oidc: {
-      issuer: (cfg.oidc && cfg.oidc.issuer) || legacy.OIDC_ISSUER || "https://accounts.google.com",
-      clientId: (cfg.oidc && cfg.oidc.clientId) || legacy.GOOGLE_CLIENT_ID || (import.meta.env?.VITE_GOOGLE_CLIENT_ID || ""),
-      redirectUri:
-        (cfg.oidc && cfg.oidc.redirectUri) ||
-        legacy.REDIRECT_URI ||
-        (import.meta.env?.VITE_REDIRECT_URI || `${origin}/callback`),
-      postLogoutRedirectUri:
-        (cfg.oidc && cfg.oidc.postLogoutRedirectUri) ||
-        legacy.POST_LOGOUT_URI ||
-        (import.meta.env?.VITE_POST_LOGOUT_REDIRECT_URI || `${origin}/`),
-    },
-    apiBase:
-      cfg.apiBase ||
-      legacy.API_BASE ||
-      (import.meta.env?.VITE_API_BASE || "/api"),
-  };
+  const env = import.meta.env || {};
+  const cfg = window.__APP_CONFIG__ || {};
 
-  // Normalize apiBase (trim trailing slash; keep relative "/api" as-is)
-  if (typeof ensured.apiBase === "string") {
-    ensured.apiBase = ensured.apiBase.startsWith("/")
-      ? ensured.apiBase.replace(/\/+$/, "")
-      : ensured.apiBase.replace(/\/+$/, "");
+  // Ensure required sections exist
+  cfg.oidc = cfg.oidc || {};
+
+  // Fill from Vite env if missing (priority: runtime -> env -> defaults)
+  cfg.oidc.issuer =
+    cfg.oidc.issuer ||
+    env.VITE_OIDC_ISSUER ||
+    "https://accounts.google.com";
+
+  cfg.oidc.clientId =
+    cfg.oidc.clientId ||
+    env.VITE_GOOGLE_CLIENT_ID ||
+    "";
+
+  cfg.oidc.redirectUri =
+    cfg.oidc.redirectUri ||
+    env.VITE_REDIRECT_URI ||
+    `${origin}/callback`;
+
+  cfg.oidc.postLogoutRedirectUri =
+    cfg.oidc.postLogoutRedirectUri ||
+    env.VITE_POST_LOGOUT_REDIRECT_URI ||
+    `${origin}/`;
+
+  cfg.apiBase =
+    cfg.apiBase ||
+    env.VITE_API_BASE ||
+    "/api";
+
+  // Normalize apiBase (keep relative "/api" as-is)
+  if (typeof cfg.apiBase === "string" && cfg.apiBase !== "/") {
+    cfg.apiBase = cfg.apiBase.startsWith("/")
+      ? cfg.apiBase.replace(/\/+$/, "")
+      : cfg.apiBase.replace(/\/+$/, "");
   }
 
-  window.__APP_CONFIG__ = ensured;
-}
+  window.__APP_CONFIG__ = cfg;
 
-function validateRuntimeConfig() {
-  const c = window.__APP_CONFIG__ || {};
-  const miss = [];
-  if (!c.oidc?.clientId) miss.push("oidc.clientId");
-  if (!c.oidc?.issuer) miss.push("oidc.issuer");
-  if (!c.oidc?.redirectUri) miss.push("oidc.redirectUri");
-  if (!c.apiBase) miss.push("apiBase");
+  // One-time sanity check for Step 1 harness + developer awareness
+  const missing = [];
+  if (!cfg.oidc?.issuer) missing.push("oidc.issuer");
+  if (!cfg.oidc?.clientId) missing.push("oidc.clientId");
+  if (!cfg.oidc?.redirectUri) missing.push("oidc.redirectUri");
+  if (!cfg.apiBase) missing.push("apiBase");
 
-  if (miss.length) {
+  if (missing.length) {
     // eslint-disable-next-line no-console
     console.warn(
       "[config] Missing keys in window.__APP_CONFIG__:",
-      miss.join(", "),
-      "\nCheck /config.js and your Google OAuth client settings."
+      missing.join(", "),
+      "\n(/config.js provides runtime values; Vite env can backfill in dev.)"
     );
   }
 }
@@ -99,3 +102,4 @@ function validateRuntimeConfig() {
     </React.StrictMode>
   );
 })();
+
