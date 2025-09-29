@@ -5,7 +5,6 @@ const routes = require("./routes");
 const app = express();
 app.use(express.json());
 app.use("/api", routes);
-app.use("/api/auth", authRouter);
 
 // Prometheus metrics
 const register = new client.Registry();
