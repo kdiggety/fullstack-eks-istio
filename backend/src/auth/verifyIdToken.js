@@ -1,6 +1,6 @@
-const ISS_PRIMARY = process.env.OIDC_ISSUER_PRIMARY || "https://accounts.google.com";
-const ISS_ALT     = process.env.OIDC_ISSUER_ALT     || "accounts.google.com";
-const AUDIENCE    = process.env.OIDC_AUDIENCE; // your Google client ID
+const ISS_PRIMARY = process.env.OIDC_ISSUER_PRIMARY || process.env.oidcIssuerPrimary || "https://accounts.google.com";
+const ISS_ALT     = process.env.OIDC_ISSUER_ALT     || process.env.oidcIssuerAlt     || "accounts.google.com";
+const AUDIENCE    = process.env.OIDC_AUDIENCE       || process.env.oidcAudience; // Google client ID
 
 // Google's JWKS endpoint
 const GOOGLE_JWKS_URL = new URL("https://www.googleapis.com/oauth2/v3/certs");
