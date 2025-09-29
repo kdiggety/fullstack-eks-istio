@@ -25,7 +25,6 @@ jobs:
       NAMESPACE: sample
       WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/web
       API_IMAGE: ghcr.io/${{ github.repository_owner }}/api
-      # Bridge secrets to env so we can safely use them in `if:` via env.*
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
       PULL_SECRET_NAME: ghcr-pull
@@ -63,7 +62,6 @@ jobs:
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      # Optional: authenticate docker client so imagetools inspect can see private GHCR
       - name: Login to GHCR (optional)
         if: ${{ env.GHCR_USERNAME != '' && env.GHCR_TOKEN != '' }}
         uses: docker/login-action@v3
@@ -72,7 +70,6 @@ jobs:
           username: ${{ env.GHCR_USERNAME }}
           password: ${{ env.GHCR_TOKEN }}
 
-      # Optional: create/refresh imagePullSecret for cluster pulls
       - name: Ensure GHCR imagePullSecret + patch default SA (optional)
         if: ${{ env.GHCR_USERNAME != '' && env.GHCR_TOKEN != '' }}
         shell: bash
@@ -83,13 +80,10 @@ jobs:
             --docker-server=ghcr.io \
             --docker-username="$GHCR_USERNAME" \
             --docker-password="$GHCR_TOKEN"
-          # Attach to default SA used by the pods
           kubectl -n "$NAMESPACE" patch serviceaccount default \
             --type merge \
             -p "{\"imagePullSecrets\":[{\"name\":\"${PULL_SECRET_NAME}\"}]}"
-          echo "Patched default ServiceAccount with imagePullSecret ${PULL_SECRET_NAME}"
 
-      # Resolve tags per service and fall back to :dev if the exact tag isn't present
       - name: Resolve WEB_TAG and API_TAG with preflight check
         id: tags
         shell: bash
@@ -97,7 +91,6 @@ jobs:
           BASE_TAG: ${{ steps.base.outputs.TAG }}
         run: |
           set -euo pipefail
-
           resolve() {
             local image="$1" tag="$2" fallback="$3"
             if docker buildx imagetools inspect "${image}:${tag}" >/dev/null 2>&1; then
@@ -106,10 +99,8 @@ jobs:
               echo "$fallback"
             fi
           }
-
           WEB_TAG="$(resolve "$WEB_IMAGE" "$BASE_TAG" dev)"
           API_TAG="$(resolve "$API_IMAGE" "$BASE_TAG" dev)"
-
           echo "WEB_TAG=$WEB_TAG" >> "$GITHUB_OUTPUT"
           echo "API_TAG=$API_TAG" >> "$GITHUB_OUTPUT"
           echo "Using WEB_TAG=$WEB_TAG, API_TAG=$API_TAG"
@@ -121,9 +112,29 @@ jobs:
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
-      - name: Build/fetch subchart deps
+      # 🔧 Auto-fix Chart.lock drift and vendor subcharts
+      - name: Normalize Helm dependencies (auto-fix Chart.lock)
         shell: bash
-        run: helm dependency build "./helm/chart"
+        run: |
+          set -euo pipefail
+          pushd ./helm/chart >/dev/null
+          # Ensure local file deps in Chart.yaml point to siblings (e.g., ../chart-secrets)
+          echo "Chart.yaml dependencies:"
+          grep -A3 -n '^dependencies:' Chart.yaml || true
+
+          # Clean any previously vendored charts to avoid stale tgz’s
+          rm -rf charts
+          mkdir -p charts
+
+          # Update will rewrite Chart.lock to match Chart.yaml and fetch file:// deps
+          helm dependency update .
+
+          # Build will vendor exact versions into ./charts (reproducible installs)
+          helm dependency build .
+
+          echo "Final dependency tree:"
+          ls -l charts || true
+          popd >/dev/null
 
       - name: Helm upgrade (use GHCR images + resolved tags)
         shell: bash
@@ -132,7 +143,6 @@ jobs:
           API_TAG: ${{ steps.tags.outputs.API_TAG }}
         run: |
           set -euo pipefail
-
           echo "Rendering (dry-run) to sanity-check values..."
           helm upgrade --install fullstack "./helm/chart" -n "$NAMESPACE" \
             --dry-run --debug \
@@ -164,23 +174,17 @@ jobs:
         run: |
           set -euo pipefail
           kubectl -n istio-system get svc istio-ingressgateway
-
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
-
-          # wait for port-forward
           if command -v nc >/dev/null 2>&1; then
             for i in {1..20}; do nc -z localhost 8080 && break || sleep 0.5; done
           else
             sleep 3
           fi
-
           echo "== /api/health =="
           curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
-
           echo "== / (frontend first 10 lines) =="
           curl -fsS "http://localhost:8080/" | head -n 10
-
           kill "$PF_PID" || true
 
       - name: If failed, dump diagnostics
