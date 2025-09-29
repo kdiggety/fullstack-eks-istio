@@ -5,9 +5,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   encryptedData:
-    OIDC_ISSUER_PRIMARY: "{{ .Values.sealed.apiEnv.oidcIssuerPrimary }}"
-    OIDC_ISSUER_ALT: "{{ .Values.sealed.apiEnv.oidcIssuerAlt }}"
-    OIDC_AUDIENCE: "{{ .Values.sealed.apiEnv.oidcAudience }}"
+    oidcIssuerPrimary: "{{ .Values.sealed.apiEnv.oidcIssuerPrimary }}"
+    oidcIssuerAlt: "{{ .Values.sealed.apiEnv.oidcIssuerAlt }}"
+    oidcAudience: "{{ .Values.sealed.apiEnv.oidcAudience }}"
   template:
     metadata:
       name: api-env
