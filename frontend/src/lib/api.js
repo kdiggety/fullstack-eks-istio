@@ -35,48 +35,44 @@ function unauthorizedError(message = "Unauthorized", status = 401, body) {
 }
 
 export function useApi() {
-  const { token } = useAuth();
+  const { token } = useAuth();                 // Google ID token from AuthProvider (GIS One Tap)
   const base = getApiBase() || "/api";
 
   async function request(method, path, body) {
+    // Treat any /secure/* path as protected by backend requireIdToken middleware
     const isSecure = path.startsWith("/secure/");
-    // Enforce token presence for secure endpoints
-    if (isSecure && !token) {
-      throw unauthorizedError("Missing ID token", 401);
-    }
-    if (isSecure && token && isExpired(token)) {
-      throw unauthorizedError("Expired ID token", 401);
-    }
+    if (isSecure && !token) throw unauthorizedError("Missing ID token", 401);
+    if (isSecure && token && isExpired(token)) throw unauthorizedError("Expired ID token", 401);
 
     const headers = new Headers();
     headers.set("Accept", "application/json");
     if (body !== undefined) headers.set("Content-Type", "application/json");
+    // Always attach Bearer if we have a token (safe for secure and non-secure calls)
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     const res = await fetch(`${base}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      // Keep your existing cookies setting; harmless with Istio-enforced OIDC
-      credentials: "include",
+      credentials: "include", // OK with Istio/front proxy; harmless if unused
     });
 
     if (!res.ok) {
-      // Try to surface JSON error body if present
       let details;
-      try { details = await res.clone().json(); } catch { /* noop */ }
+      try { details = await res.clone().json(); } catch { /* ignore */ }
       if (res.status === 401 || res.status === 403) {
         throw unauthorizedError("Unauthorized", res.status, details);
       }
-      const err = new Error(`${res.status}`);
+      const err = new Error(`${res.status} ${res.statusText}`.trim());
       err.status = res.status;
       if (details !== undefined) err.body = details;
       throw err;
     }
 
-    // Handle empty responses safely
+    // Handle empty/204 safely and only parse JSON when present
     const text = await res.text();
-    return text ? JSON.parse(text) : null;
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return text; }
   }
 
   async function get(path) {
@@ -87,11 +83,18 @@ export function useApi() {
     return request("POST", path, body);
   }
 
+  // Unauthenticated sample endpoint (keep as-is unless your API changes)
   async function greet(name) {
     const res = await fetch(`${base}/greet/${encodeURIComponent(name)}`);
     if (!res.ok) throw new Error("API error");
     return res.json();
   }
 
-  return { get, post, greet };
+  // Convenience helper for your secure route
+  async function securePing() {
+    return get("/secure/ping");
+  }
+
+  return { get, post, greet, securePing };
 }
+
