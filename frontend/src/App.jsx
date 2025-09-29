@@ -3,11 +3,9 @@ import { Routes, Route } from "react-router-dom";
 import AuthButtons from "./components/AuthButtons";
 import SecurePing from "./pages/SecurePing";
 import { useApi } from "./lib/api";
-import AuthCallback from "./auth/AuthCallback";
 
 // Safer localStorage hook
 function useLocalStorage(key, initialValue) {
-  const { greet } = useApi();
   const [value, setValue] = useState(() => {
     try {
       const raw = localStorage.getItem(key);
@@ -41,7 +39,7 @@ function HomePage() {
 
       <h2>Secure Ping</h2>
       <p style={{ opacity: 0.8 }}>
-        Calls <code>/api/secure/ping</code> with your token.
+        Calls <code>/api/secure/ping</code> with your Google ID token.
       </p>
       <SecurePing />
       <hr />
@@ -60,8 +58,6 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      {/* Handles Google redirect: /callback?code=... */}
-      <Route path="/callback" element={<AuthCallback />} />
     </Routes>
   );
 }
