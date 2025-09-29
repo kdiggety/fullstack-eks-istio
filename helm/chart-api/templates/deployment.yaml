@@ -25,6 +25,12 @@ spec:
             - name: http
               containerPort: {{ .Values.containerPort }}
           env:
+            - name: oidcIssuerPrimary
+              valueFrom: { secretKeyRef: { name: api-env, key: oidcIssuerPrimary } }
+            - name: oidcIssuerAlt
+              valueFrom: { secretKeyRef: { name: api-env, key: oidcIssuerAlt } }
+            - name: oidcAudience
+              valueFrom: { secretKeyRef: { name: api-env, key: oidcAudience } }
             - name: REDIS_HOST
               value: {{ tpl .Values.redis.host . | quote }}
             - name: REDIS_PORT

@@ -46,6 +46,9 @@ api:
     type: ClusterIP
     port: 80
 
+  envFromSecrets:
+    - api-env
+
   # Redis connection contract used by your api chart templates
   redis:
     host: "{{ .Release.Name }}-redis-master"   # e.g., fullstack-redis-master
