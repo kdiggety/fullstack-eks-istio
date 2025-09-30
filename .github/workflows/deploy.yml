@@ -30,8 +30,22 @@ jobs:
       PULL_SECRET_NAME: ghcr-pull
 
     steps:
-      - name: Checkout
+      # --- Hard clean so old tgz/locks from self-hosted runner don't linger
+      - name: Checkout (force clean)
         uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 0
+
+      - name: Purge untracked build artifacts (belt + suspenders)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clean -ffdx
+          git reset --hard HEAD
+          # Nuke any stray vendored tarballs/locks anywhere in the repo
+          find . -type f -name '*.tgz' -print -delete || true
+          find . -type f -name 'Chart.lock' -print -delete || true
 
       - name: Resolve base tag (prefer input → release tag → full SHA)
         id: base
@@ -117,17 +131,16 @@ jobs:
         run: |
           set -euo pipefail
           pushd ./helm/chart >/dev/null
-      
+
           echo "Chart.yaml dependencies:"
           grep -A3 -n '^dependencies:' Chart.yaml || true
           echo
-      
-          # Clean any previously vendored charts to avoid stale tgz’s
+
+          # Clean vendored charts to avoid stale tgz’s
           rm -rf charts
           mkdir -p charts
-      
+
           # If Chart.lock is out of sync with Chart.yaml, delete it and rebuild fresh.
-          # We let 'helm dependency build' be the oracle: if it fails, the lock is stale.
           if [ -f Chart.lock ]; then
             if ! helm dependency build . >/dev/null 2>&1; then
               echo "Chart.lock is stale → removing and regenerating..."
@@ -138,21 +151,37 @@ jobs:
           else
             echo "No Chart.lock present (will be generated)."
           fi
-      
-          # Always ensure repos are up to date (covers remote deps like bitnami/redis)
+
+          # Keep remotes fresh (e.g., bitnami/redis)
           helm repo update
-      
-          # Update will (re)write Chart.lock to match Chart.yaml and fetch file:// deps
+
+          # Update rewrites Chart.lock from Chart.yaml + file:// deps
           helm dependency update .
-      
-          # Build will vendor exact versions into ./charts (reproducible installs)
+
+          # Vendor exact versions into ./charts
           helm dependency build .
-      
+
           echo
           echo "Final dependency tree:"
           ls -l charts || true
-      
+
           popd >/dev/null
+
+      # --- Optional safety: ensure secrets subchart packages the lowercase keys
+      - name: Verify packaged secrets template (lowercase keys)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL="$(ls helm/chart/charts/secrets-*.tgz 2>/dev/null | head -n1 || true)"
+          if [ -z "${TARBALL:-}" ]; then
+            echo "ERROR: secrets subchart not vendored to helm/chart/charts"; exit 1
+          fi
+          echo "Inspecting $TARBALL"
+          tar -xOf "$TARBALL" secrets/templates/api-env.yaml | tee /tmp/api-env.yaml
+          if grep -qE '\bOIDC_' /tmp/api-env.yaml; then
+            echo "ERROR: Uppercase OIDC_* keys found in packaged secrets chart."; exit 1
+          fi
+          echo "OK: secrets template uses lowercase keys."
 
       - name: Helm upgrade (use GHCR images + resolved tags)
         shell: bash
