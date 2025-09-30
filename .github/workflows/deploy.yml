@@ -112,28 +112,46 @@ jobs:
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
-      # 🔧 Auto-fix Chart.lock drift and vendor subcharts
       - name: Normalize Helm dependencies (auto-fix Chart.lock)
         shell: bash
         run: |
           set -euo pipefail
           pushd ./helm/chart >/dev/null
-          # Ensure local file deps in Chart.yaml point to siblings (e.g., ../chart-secrets)
+      
           echo "Chart.yaml dependencies:"
           grep -A3 -n '^dependencies:' Chart.yaml || true
-
+          echo
+      
           # Clean any previously vendored charts to avoid stale tgz’s
           rm -rf charts
           mkdir -p charts
-
-          # Update will rewrite Chart.lock to match Chart.yaml and fetch file:// deps
+      
+          # If Chart.lock is out of sync with Chart.yaml, delete it and rebuild fresh.
+          # We let 'helm dependency build' be the oracle: if it fails, the lock is stale.
+          if [ -f Chart.lock ]; then
+            if ! helm dependency build . >/dev/null 2>&1; then
+              echo "Chart.lock is stale → removing and regenerating..."
+              rm -f Chart.lock
+            else
+              echo "Chart.lock appears in sync (pre-check)."
+            fi
+          else
+            echo "No Chart.lock present (will be generated)."
+          fi
+      
+          # Always ensure repos are up to date (covers remote deps like bitnami/redis)
+          helm repo update
+      
+          # Update will (re)write Chart.lock to match Chart.yaml and fetch file:// deps
           helm dependency update .
-
+      
           # Build will vendor exact versions into ./charts (reproducible installs)
           helm dependency build .
-
+      
+          echo
           echo "Final dependency tree:"
           ls -l charts || true
+      
           popd >/dev/null
 
       - name: Helm upgrade (use GHCR images + resolved tags)
