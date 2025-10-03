@@ -3,6 +3,7 @@ set -euo pipefail
 
 NS="kube-system"
 RELEASE="sealed-secrets"
+KEY_BACKUP="./sealed-secrets-key.backup.yaml"
 
 echo "== Ensuring Sealed Secrets controller is installed =="
 helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
@@ -11,8 +12,6 @@ helm upgrade --install "$RELEASE" sealed-secrets/sealed-secrets \
   -n "$NS" --create-namespace
 
 # Optional: restore backup key if you have one
-KEY_BACKUP="./sealed-secrets-key.backup.yaml"
-
 if [ -f "$KEY_BACKUP" ]; then
   echo "== Restoring sealed-secrets key from $KEY_BACKUP =="
   # delete any auto-generated key
@@ -29,6 +28,17 @@ else
 fi
 
 # Wait for controller to be ready
+echo "== Waiting for controller to be Ready =="
 kubectl -n "$NS" rollout status deploy/sealed-secrets --timeout=120s
+
+# --- NEW: Always back up the current key after controller is ready ---
+echo "== Backing up current sealed-secrets-key to $KEY_BACKUP =="
+kubectl -n "$NS" get secret sealed-secrets-key -o yaml > "$KEY_BACKUP"
+echo "✅ Backup complete. Keep $KEY_BACKUP safe (private repo or vault)."
+
+# Optional sanity check: print key versions in the secret (if present)
+echo "== Sanity: show secret metadata =="
+kubectl -n "$NS" get secret sealed-secrets-key -o jsonpath='{.metadata.name}{"  created: "}{.metadata.creationTimestamp}{"\n"}' || true
+
 echo "✅ Sealed Secrets bootstrap complete."
 
