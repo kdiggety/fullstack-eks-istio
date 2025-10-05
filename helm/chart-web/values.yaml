@@ -1,9 +1,12 @@
 replicaCount: 1
 
 image:
-  repository: sample-frontend
+  repository: ghcr.io/kdiggety/web
   tag: dev
   pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull
 
 service:
   port: 80
