@@ -6,8 +6,8 @@ metadata:
 spec:
   encryptedData:
     oidcIssuerPrimary: "{{ .Values.sealed.apiEnv.oidcIssuerPrimary }}"
-    oidcIssuerAlt: "{{ .Values.sealed.apiEnv.oidcIssuerAlt }}"
-    oidcAudience: "{{ .Values.sealed.apiEnv.oidcAudience }}"
+    oidcIssuerAlt:     "{{ .Values.sealed.apiEnv.oidcIssuerAlt }}"
+    oidcAudience:      "{{ .Values.sealed.apiEnv.oidcAudience }}"
   template:
     metadata:
       name: api-env

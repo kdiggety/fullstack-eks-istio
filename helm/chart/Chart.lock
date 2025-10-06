@@ -1,0 +1,18 @@
+dependencies:
+- name: api
+  repository: file://../chart-api
+  version: 0.1.1
+- name: web
+  repository: file://../chart-web
+  version: 0.3.3
+- name: istio
+  repository: file://../chart-istio
+  version: 0.1.1
+- name: secrets
+  repository: file://../chart-secrets
+  version: 0.1.1
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 19.5.5
+digest: sha256:a63cebd8f315b0c06076cf986113b5bacdbda9568055ae389921ad06d26836c8
+generated: "2025-10-06T10:45:54.967479-07:00"
