@@ -11,34 +11,37 @@ helm repo update
 helm upgrade --install "$RELEASE" sealed-secrets/sealed-secrets \
   -n "$NS" --create-namespace
 
-# Optional: restore backup key if you have one
-if [ -f "$KEY_BACKUP" ]; then
+# Restore only if backup exists and is non-empty
+if [ -s "$KEY_BACKUP" ]; then
   echo "== Restoring sealed-secrets key from $KEY_BACKUP =="
-  # delete any auto-generated key
-  kubectl -n "$NS" delete secret sealed-secrets-key --ignore-not-found
-  # apply the backed-up key
+  kubectl -n "$NS" delete secret sealed-secrets-key --ignore-not-found || true
   kubectl apply -f "$KEY_BACKUP"
-  # restart the controller so it picks up the restored key
   kubectl -n "$NS" rollout restart deploy/sealed-secrets
 else
-  echo "!! No backup key found ($KEY_BACKUP)."
-  echo "   SealedSecrets will use a fresh keypair."
-  echo "   If you reseal secrets now, commit the new ciphertexts and back up the new key:"
-  echo "     kubectl -n $NS get secret sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml"
+  echo "!! No usable backup key found ($KEY_BACKUP). Controller will generate a new keypair."
 fi
 
-# Wait for controller to be ready
-echo "== Waiting for controller to be Ready =="
-kubectl -n "$NS" rollout status deploy/sealed-secrets --timeout=120s
+echo "== Waiting for controller rollout =="
+kubectl -n "$NS" rollout status deploy/sealed-secrets --timeout=180s
 
-# --- NEW: Always back up the current key after controller is ready ---
-echo "== Backing up current sealed-secrets-key to $KEY_BACKUP =="
-kubectl -n "$NS" get secret sealed-secrets-key -o yaml > "$KEY_BACKUP"
-echo "✅ Backup complete. Keep $KEY_BACKUP safe (private repo or vault)."
+# Wait for the active key to appear (handles random suffixes)
+echo "== Waiting for controller to generate key secret =="
+SECRET_NAME=""
+for i in {1..30}; do
+  SECRET_NAME="$(kubectl -n "$NS" get secret \
+    -l sealedsecrets.bitnami.com/sealed-secrets-key=active \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [ -n "$SECRET_NAME" ]; then break; fi
+  sleep 2
+done
 
-# Optional sanity check: print key versions in the secret (if present)
-echo "== Sanity: show secret metadata =="
-kubectl -n "$NS" get secret sealed-secrets-key -o jsonpath='{.metadata.name}{"  created: "}{.metadata.creationTimestamp}{"\n"}' || true
+if [ -z "$SECRET_NAME" ]; then
+  echo "ERROR: Could not find active sealed-secrets key"
+  kubectl -n "$NS" get secret | grep -i sealed || true
+  exit 1
+fi
 
-echo "✅ Sealed Secrets bootstrap complete."
-
+echo "== Active key: $SECRET_NAME"
+echo "== Backing up current key to $KEY_BACKUP =="
+kubectl -n "$NS" get secret "$SECRET_NAME" -o yaml > "$KEY_BACKUP"
+echo "✅ Backup saved. Keep $KEY_BACKUP safe (private repo or vault)."

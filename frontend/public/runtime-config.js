@@ -1,1 +1,1 @@
-window.__APP_CONFIG__={"oidc":{"issuer":"https://accounts.google.com","clientId":"","redirectUri":window.location.origin+"/callback","postLogoutRedirectUri":window.location.origin+"/"},"apiBase":"/api"};
+window.__APP_CONFIG__={"oidc":{"issuer":"https://accounts.google.com","clientId":"757483491986-s6es27343115bs05medv52v506cg81b0.apps.googleusercontent.com","redirectUri":window.location.origin+"/callback","postLogoutRedirectUri":window.location.origin+"/"},"apiBase":"/api"};

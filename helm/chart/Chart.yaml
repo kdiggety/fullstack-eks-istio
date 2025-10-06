@@ -10,7 +10,7 @@ dependencies:
     version: 0.1.1
     repository: "file://../chart-api"
   - name: web
-    version: 0.3.0
+    version: 0.3.3
     repository: "file://../chart-web"
   - name: istio
     version: 0.1.1

@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   encryptedData:
-    API_BASE: {{ .Values.sealed.webEnv.apiBase | quote }}
+    apiBase: "{{ .Values.sealed.webEnv.apiBase }}"
   template:
     metadata:
       name: web-env

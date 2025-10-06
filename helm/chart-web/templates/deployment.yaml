@@ -1,3 +1,4 @@
+{{- $webEnv := (lookup "v1" "Secret" .Release.Namespace "web-env") -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,8 +18,8 @@ spec:
         app: web
         app.kubernetes.io/name: {{ .Chart.Name }}
       annotations:
-        # Rollout whenever runtime config changes
-        checksum/config: {{ printf "GOOGLE_CLIENT_ID=%s\nAPI_BASE=%s\n" (.Values.runtimeConfig.googleClientId | toString) ((.Values.runtimeConfig.apiBase | default "/api") | toString) | sha256sum }}
+        checksum/config: {{ printf "GOOGLE_CLIENT_ID=%s\napiBase=%s\n" (.Values.runtimeConfig.googleClientId | toString) ((.Values.runtimeConfig.apiBase | default "/api") | toString) | sha256sum | quote }}
+        checksum/web-env: {{- if $webEnv }} {{ toJson $webEnv.data | sha256sum | quote }} {{- else }} "absent" {{- end }}
     spec:
       volumes:
         - name: runtime-config
@@ -34,6 +35,15 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.containerPort }}
+
+          {{- if .Values.envFromSecrets }}
+          envFrom:
+          {{- range .Values.envFromSecrets }}
+            - secretRef:
+                name: {{ . | quote }}
+          {{- end }}
+          {{- end }}
+
           readinessProbe:
             httpGet:
               path: {{ .Values.readinessPath }}
@@ -46,9 +56,9 @@ spec:
               port: {{ .Values.containerPort }}
             initialDelaySeconds: 10
             periodSeconds: 10
+
           volumeMounts:
             - name: runtime-config
               mountPath: /usr/share/nginx/html/config.js
               subPath: config.js
               readOnly: true
-
