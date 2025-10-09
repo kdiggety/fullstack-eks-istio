@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import AuthButtons from "./components/AuthButtons";
 import SecurePing from "./pages/SecurePing";
 import { useApi } from "./lib/api";
+import AuthCallback from "./auth/AuthCallback";
 
 // Safer localStorage hook
 function useLocalStorage(key, initialValue) {
