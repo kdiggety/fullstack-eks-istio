@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import AuthButtons from "./components/AuthButtons";
 import SecurePing from "./pages/SecurePing";
 import { useApi } from "./lib/api";
+import AuthCallback from "./auth/AuthCallback";
 
 // Safer localStorage hook
 function useLocalStorage(key, initialValue) {
@@ -58,6 +59,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/callback" element={<AuthCallback />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
