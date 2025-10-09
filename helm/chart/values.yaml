@@ -8,7 +8,17 @@
 redis:
   enabled: true
   architecture: standalone
+  image:
+    registry: docker.io
+    repository: bitnami/redis
+    tag: ""   # force digest-only
+    digest: "sha256:dc2a0dd151651b8081045e84ef8f74d53c0def91f799539eb1fda04a7959c069"
+    pullPolicy: IfNotPresent
   master:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        partition: 0
     persistence:
       enabled: false                     # dev-friendly; enable in prod overlays
     podAnnotations:
