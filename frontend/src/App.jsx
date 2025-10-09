@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import AuthButtons from "./components/AuthButtons";
 import SecurePing from "./pages/SecurePing";
 import { useApi } from "./lib/api";
