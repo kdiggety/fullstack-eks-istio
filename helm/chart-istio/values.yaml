@@ -20,3 +20,13 @@ virtualService:
       prefix: /api
       service: api
       port: 80
+
+apiAuthz:
+  enabled: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  publicGetPaths:
+    - /api/health
+  publicPostPaths:
+    - /api/auth/callback
