@@ -1,0 +1,27 @@
+{{- if .Values.apiAuthz.enabled }}
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "istio.fullname" . }}-api-allow-public
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+{{- toYaml .Values.apiAuthz.selector | nindent 4 }}
+  action: ALLOW
+  rules:
+  {{- if .Values.apiAuthz.publicGetPaths }}
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths:
+{{- toYaml .Values.apiAuthz.publicGetPaths | nindent 14 }}
+  {{- end }}
+  {{- if .Values.apiAuthz.publicPostPaths }}
+    - to:
+        - operation:
+            methods: ["POST"]
+            paths:
+{{- toYaml .Values.apiAuthz.publicPostPaths | nindent 14 }}
+  {{- end }}
+{{- end }}
+
