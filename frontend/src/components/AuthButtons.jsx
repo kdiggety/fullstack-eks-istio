@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+// src/components/AuthButtons.jsx
+import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
-import { getClientId } from "../config";
 
 function decodeJwt(token) {
   try {
@@ -8,12 +8,9 @@ function decodeJwt(token) {
     if (!payload) return null;
     const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
     const jsonStr = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
     );
-    return JSON.parse(jsonStr); // { exp, email, sub, ... }
+    return JSON.parse(jsonStr);
   } catch {
     return null;
   }
@@ -21,25 +18,6 @@ function decodeJwt(token) {
 
 export default function AuthButtons() {
   const { user, token, signIn, signOut } = useAuth();
-  const googleBtnRef = useRef(null);
-  const CLIENT_ID = getClientId();
-
-  // Render the Google button when signed out
-  useEffect(() => {
-    if (user || !googleBtnRef.current || !CLIENT_ID) return;
-    const g = window.google && window.google.accounts && window.google.accounts.id;
-    if (!g) return; // GIS script loads async from AuthProvider
-    try {
-      g.initialize({ client_id: CLIENT_ID, callback: () => {} }); // real callback handled in AuthProvider
-      g.renderButton(googleBtnRef.current, {
-        theme: "outline",
-        text: "signin_with",
-        size: "medium",
-        type: "standard",
-        shape: "rectangular",
-      });
-    } catch {}
-  }, [user, CLIENT_ID]);
 
   const status = useMemo(() => {
     if (!token) return { label: "no token", color: "#999" };
@@ -58,16 +36,10 @@ export default function AuthButtons() {
         <>
           <span>{user.email}</span>
           <button onClick={signOut}>Sign out</button>
-          <button onClick={signIn} title="Prompt Google to refresh your ID token">
-            Refresh sign-in
-          </button>
+          <button onClick={signIn} title="Refresh your ID token">Refresh sign-in</button>
         </>
       ) : (
-        <>
-          <div ref={googleBtnRef} />
-          {/* Fallback in case GIS button can’t render */}
-          <button onClick={signIn}>Sign in with Google</button>
-        </>
+        <button onClick={signIn}>Sign in with Google</button>
       )}
       <small style={{ color: status.color }}>{status.label}</small>
     </div>
