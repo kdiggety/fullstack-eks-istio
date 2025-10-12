@@ -2,10 +2,14 @@ name: Frontend CI
 
 on:
   pull_request:
-    paths: ["frontend/**"]
+    paths: ["frontend/**", ".github/workflows/ci-frontend.yml", "frontend/Dockerfile"]
   push:
     branches: [main]
     tags: ["v*.*.*"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+      - "frontend/Dockerfile"
   workflow_dispatch:
 
 permissions:
@@ -55,7 +59,7 @@ jobs:
         id: meta
         shell: bash
         run: |
-          echo "SHORT=${GITHUB_SHA:0,7}" >> "$GITHUB_OUTPUT"
+          echo "SHORT=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
@@ -67,6 +71,8 @@ jobs:
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          install: true
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -82,10 +88,11 @@ jobs:
           context: ./frontend
           push: true
           platforms: linux/arm64,linux/amd64
+          # Do NOT put inline comments on the tag lines
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG_FULL }}          # immutable (preferred for deploy)
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }} # convenience; do NOT deploy from this
-            ${{ env.IMAGE }}:dev                           # mutable channel
+            ${{ env.IMAGE }}:${{ env.TAG_FULL }}
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }}
+            ${{ env.IMAGE }}:dev
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
           labels: |
@@ -102,6 +109,8 @@ jobs:
       - name: Show pushed digest & platforms
         run: |
           echo "Digest: ${{ steps.build_push.outputs.digest }}"
+          echo "Platforms (full SHA):"
           docker buildx imagetools inspect $IMAGE:${{ env.TAG_FULL }} | sed -n '/Platforms:/,/^$/p'
+          echo "Platforms (:dev):"
           docker buildx imagetools inspect $IMAGE:dev | sed -n '/Platforms:/,/^$/p'
 
