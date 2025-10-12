@@ -23,10 +23,20 @@ jobs:
       REPO:  ${{ github.event.repository.name }}
       WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/web
       API_IMAGE: ghcr.io/${{ github.repository_owner }}/api
+
       # Optional: if images are private and you want docker pulls to use a secret
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
       PULL_SECRET_NAME: ghcr-pull
+
+      # Let gh CLI use the workflow token (has packages:read due to permissions above)
+      GH_TOKEN: ${{ github.token }}
+
+      # If your GHCR packages live under an ORG, set:
+      #   GH_PACKAGES_SCOPE: org
+      #   GH_PACKAGES_OWNER: your-org-name
+      GH_PACKAGES_SCOPE: user
+      GH_PACKAGES_OWNER: ${{ github.repository_owner }}
 
     steps:
       - name: Checkout (clean)
@@ -92,11 +102,6 @@ jobs:
       - name: Resolve latest tags for web and api (independent)
         id: tags
         shell: bash
-        env:
-          OWNER: ${{ env.OWNER }}
-          REPO:  ${{ env.REPO }}
-          WEB_IMAGE: ${{ env.WEB_IMAGE }}
-          API_IMAGE: ${{ env.API_IMAGE }}
         run: |
           set -euo pipefail
 
@@ -105,18 +110,21 @@ jobs:
             docker buildx imagetools inspect "$1:$2" >/dev/null 2>&1
           }
 
-          # 1) latest main commit SHA
-          echo "Resolving latest commit SHA on main…"
-          LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" \
-            /repos/$OWNER/$REPO/commits/main -q .sha)
-          echo "Latest main SHA: $LATEST_SHA"
+          # pick correct packages API path
+          gh_pkg_url() {
+            local pkg="$1"
+            if [ "${GH_PACKAGES_SCOPE:-user}" = "org" ]; then
+              echo "/orgs/${GH_PACKAGES_OWNER}/packages/container/${pkg}/versions?per_page=200"
+            else
+              echo "/users/${GH_PACKAGES_OWNER}/packages/container/${pkg}/versions?per_page=200"
+            fi
+          }
 
-          # 2) newest GHCR tag list for a package (exclude 'latest'), newest first
+          # newest GHCR tag list for a package (exclude 'latest'), newest first
           list_tags () {
             local pkg="$1" # 'web' or 'api'
-            # If packages are under an org, change to /orgs/<org>/packages/container/<pkg>/versions
-            gh api -H "Accept: application/vnd.github+json" \
-              /users/$OWNER/packages/container/$pkg/versions?per_page=200 \
+            local url; url="$(gh_pkg_url "$pkg")"
+            gh api -H "Accept: application/vnd.github+json" "$url" \
             | jq -r '
                 [ .[] | {
                     updated_at,
@@ -128,40 +136,54 @@ jobs:
                 | .[]'
           }
 
-          # Resolve WEB tag
+          # 1) latest main commit SHA
+          echo "Resolving latest commit SHA on main…"
+          LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" \
+            "/repos/$OWNER/$REPO/commits/main" -q .sha)
+          echo "Latest main SHA: $LATEST_SHA"
+
+          # ---- Resolve WEB tag (prefer latest SHA, else newest available tag) ----
           WEB_TAG=""
           if have_img "$WEB_IMAGE" "$LATEST_SHA"; then
             WEB_TAG="$LATEST_SHA"
             echo "WEB: using latest main SHA ($WEB_TAG)"
           else
             echo "WEB: latest SHA not found; finding newest GHCR tag…"
-            mapfile -t WEB_TAGS < <(list_tags web || true)
-            if [ ${#WEB_TAGS[@]} -eq 0 ]; then
-              echo "::error ::WEB: No tags found in GHCR (need packages:read?)"; exit 1
+            WEB_TAG=""
+            # portable read loop (works on bash 3+)
+            while IFS= read -r t; do
+              [ -z "$t" ] && continue
+              if have_img "$WEB_IMAGE" "$t"; then
+                WEB_TAG="$t"
+                break
+              fi
+            done < <(list_tags web || true)
+            if [ -z "$WEB_TAG" ]; then
+              echo "::error ::WEB: Could not resolve a usable tag (need packages:read? are tags present?)"
+              exit 1
             fi
-            # pick the first tag that exists
-            for t in "${WEB_TAGS[@]}"; do
-              if have_img "$WEB_IMAGE" "$t"; then WEB_TAG="$t"; break; fi
-            done
-            [ -n "$WEB_TAG" ] || { echo "::error ::WEB: Could not resolve a usable tag"; exit 1; }
             echo "WEB: using newest available tag ($WEB_TAG)"
           fi
 
-          # Resolve API tag
+          # ---- Resolve API tag (prefer latest SHA, else newest available tag) ----
           API_TAG=""
           if have_img "$API_IMAGE" "$LATEST_SHA"; then
             API_TAG="$LATEST_SHA"
             echo "API: using latest main SHA ($API_TAG)"
           else
             echo "API: latest SHA not found; finding newest GHCR tag…"
-            mapfile -t API_TAGS < <(list_tags api || true)
-            if [ ${#API_TAGS[@]} -eq 0 ]; then
-              echo "::error ::API: No tags found in GHCR (need packages:read?)"; exit 1
+            API_TAG=""
+            while IFS= read -r t; do
+              [ -z "$t" ] && continue
+              if have_img "$API_IMAGE" "$t"; then
+                API_TAG="$t"
+                break
+              fi
+            done < <(list_tags api || true)
+            if [ -z "$API_TAG" ]; then
+              echo "::error ::API: Could not resolve a usable tag (need packages:read? are tags present?)"
+              exit 1
             fi
-            for t in "${API_TAGS[@]}"; do
-              if have_img "$API_IMAGE" "$t"; then API_TAG="$t"; break; fi
-            done
-            [ -n "$API_TAG" ] || { echo "::error ::API: Could not resolve a usable tag"; exit 1; }
             echo "API: using newest available tag ($API_TAG)"
           fi
 
@@ -174,8 +196,6 @@ jobs:
         env:
           WEB_TAG: ${{ steps.tags.outputs.WEB_TAG }}
           API_TAG: ${{ steps.tags.outputs.API_TAG }}
-          WEB_IMAGE: ${{ env.WEB_IMAGE }}
-          API_IMAGE: ${{ env.API_IMAGE }}
         run: |
           set -euo pipefail
           echo "Deploying: web:$WEB_TAG  api:$API_TAG"
