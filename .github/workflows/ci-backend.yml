@@ -35,6 +35,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---- Establish a clean Docker config and PATH for plugins FIRST ----
+      - name: Prepare Docker config dir (DOCKER_CONFIG)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/.docker/cli-plugins"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/.docker" >> "$GITHUB_ENV"
+          echo "Prepared DOCKER_CONFIG=$RUNNER_TEMP/.docker"
+
+      # Install buildx plugin explicitly into $DOCKER_CONFIG/cli-plugins
+      - name: Install docker-buildx plugin (fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx version >/dev/null 2>&1; then
+            echo "buildx already available (system plugin)"; exit 0
+          fi
+          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"   # darwin / linux
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            x86_64|amd64)  BX_ARCH=amd64 ;;
+            arm64|aarch64) BX_ARCH=arm64 ;;
+            *) echo "::error ::Unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          BX_VER="v0.16.2"
+          BX_URL="https://github.com/docker/buildx/releases/download/${BX_VER}/buildx-${BX_VER}.${OS}-${BX_ARCH}"
+          curl -fsSL "$BX_URL" -o "$DOCKER_CONFIG/cli-plugins/docker-buildx"
+          chmod +x "$DOCKER_CONFIG/cli-plugins/docker-buildx"
+          docker buildx version
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -50,6 +80,26 @@ jobs:
         working-directory: backend
         run: npm test -- --ci
 
+      # ---- Multi-arch prereqs (after plugin is ensured) ----
+      - name: Setup QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx (container driver)
+        uses: docker/setup-buildx-action@v3
+        with:
+            install: true
+            use: true
+            driver: docker-container
+            buildkitd-flags: --debug
+
+      - name: Verify buildx availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx version
+          docker buildx ls || true
+          docker version  || true
+
       - name: Derive short/release tags
         id: meta
         shell: bash
@@ -60,51 +110,6 @@ jobs:
           else
             echo "RELEASE_TAG=" >> "$GITHUB_OUTPUT"
           fi
-
-      # --- Multi-arch prerequisites ---
-      - name: Setup QEMU (multi-arch)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Setup Docker Buildx (container driver)
-        id: setup_buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-          use: true
-          driver: docker-container
-          buildkitd-flags: --debug
-
-      # --- Prove buildx exists; if not, install CLI plugin fallback ---
-      - name: Verify buildx (and fallback install if missing)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if docker buildx version >/dev/null 2>&1; then
-            echo "buildx present"
-          else
-            echo "buildx missing → installing CLI plugin fallback…"
-            mkdir -p ~/.docker/cli-plugins
-            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-            ARCH="$(uname -m)"
-            case "$ARCH" in
-              x86_64|amd64)   BX_ARCH=amd64 ;;
-              arm64|aarch64)  BX_ARCH=arm64 ;;
-              *) echo "::error ::Unsupported arch: $ARCH"; exit 1 ;;
-            esac
-            BX_VER="v0.16.2"
-            BX_URL="https://github.com/docker/buildx/releases/download/${BX_VER}/buildx-${BX_VER}.${OS}-${BX_ARCH}"
-            curl -fsSL "$BX_URL" -o ~/.docker/cli-plugins/docker-buildx
-            chmod +x ~/.docker/cli-plugins/docker-buildx
-            docker buildx version
-          fi
-          docker buildx ls || true
-          docker version || true
-
-      # Isolate Docker auth for this job (avoids stale creds on self-hosted)
-      - name: Isolate Docker config for this job
-        run: |
-          mkdir -p "$RUNNER_TEMP/.docker"
-          echo "DOCKER_CONFIG=$RUNNER_TEMP/.docker" >> "$GITHUB_ENV"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
