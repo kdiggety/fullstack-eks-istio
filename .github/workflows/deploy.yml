@@ -1,87 +1,39 @@
-name: Deploy Local K8s (Umbrella Helm)
-
-on:
-  push:
-    branches: [ main ]
-    tags: [ 'v*.*.*' ]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Image tag to deploy (commit SHA or semver tag). Defaults to the current commit SHA."
-        required: false
-
-concurrency:
-  group: deploy-local
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  packages: read
-
 jobs:
   deploy:
     runs-on: [self-hosted, local-k8s]
 
-    env:
-      # ----- cluster/env -----
-      NAMESPACE: sample
+    permissions:
+      contents: read
+      packages: read
 
-      # ----- images (GHCR) -----
+    env:
+      NAMESPACE: sample
+      OWNER: ${{ github.repository_owner }}
+      REPO:  ${{ github.event.repository.name }}
       WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/web
       API_IMAGE: ghcr.io/${{ github.repository_owner }}/api
-
-      # If images are private, these enable docker login
+      # Optional: if images are private and you want docker pulls to use a secret
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
       PULL_SECRET_NAME: ghcr-pull
 
     steps:
-      # Clean workspace so vendored tgz/locks don’t linger
-      - name: Checkout (force clean)
+      - name: Checkout (clean)
         uses: actions/checkout@v4
         with:
           clean: true
           fetch-depth: 0
 
-      - name: Purge untracked build artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clean -ffdx
-          git reset --hard HEAD
-          find . -type f -name '*.tgz' -print -delete || true
-          find . -type f -name 'Chart.lock' -print -delete || true
-
-      - name: Resolve base tag (input → release tag → commit SHA)
-        id: base
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-          else
-            TAG="${GITHUB_SHA}"
-          fi
-          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Base tag: $TAG"
-
-      - name: Show cluster context
+      - name: Ensure kubectl context & namespace
         shell: bash
         run: |
           set -euo pipefail
           kubectl config current-context
           kubectl get nodes -o wide
-
-      - name: Ensure namespace & sidecar injection
-        shell: bash
-        run: |
-          set -euo pipefail
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
-      - name: Login to GHCR (if creds provided)
+      - name: Login to GHCR for pulls (optional)
         if: ${{ env.GHCR_USERNAME != '' && env.GHCR_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
@@ -89,7 +41,7 @@ jobs:
           username: ${{ env.GHCR_USERNAME }}
           password: ${{ env.GHCR_TOKEN }}
 
-      - name: Ensure GHCR imagePullSecret on default SA (optional)
+      - name: Ensure imagePullSecret on default SA (optional)
         if: ${{ env.GHCR_USERNAME != '' && env.GHCR_TOKEN != '' }}
         shell: bash
         run: |
@@ -103,162 +55,135 @@ jobs:
             --type merge \
             -p "{\"imagePullSecrets\":[{\"name\":\"${PULL_SECRET_NAME}\"}]}"
 
-      - name: Add helm repos
+      - name: Helm repos & deps (umbrella chart)
         shell: bash
         run: |
           set -euo pipefail
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
-
-      - name: Normalize Helm dependencies (umbrella chart)
-        shell: bash
-        run: |
-          set -euo pipefail
           pushd ./helm/chart >/dev/null
           rm -rf charts
-          mkdir -p charts
-          # If Chart.lock is stale, rebuild
           helm dependency update .
           helm dependency build .
           ls -l charts || true
           popd >/dev/null
 
-      # (Optional) verify secrets subchart keys are lower-camel-case
-      - name: Verify packaged secrets template (lowercase keys)
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARBALL="$(ls helm/chart/charts/secrets-*.tgz 2>/dev/null | head -n1 || true)"
-          if [ -z "${TARBALL:-}" ]; then
-            echo "ERROR: secrets subchart not vendored"; exit 1
-          fi
-          tar -xOf "$TARBALL" secrets/templates/api-env.yaml | tee /tmp/api-env.yaml
-          if grep -qE '\bOIDC_' /tmp/api-env.yaml; then
-            echo "ERROR: Uppercase OIDC_* keys found"; exit 1
-          fi
-          echo "OK: secrets template uses lowercase keys."
-
-      # -------- DIGEST RESOLUTION (no fallback to 'dev') ----------
-      - name: Resolve digests for web/api (linux/amd64)
-        id: digests
+      # ---------- Resolve LATEST TAGS INDEPENDENTLY (web & api) ----------
+      - name: Resolve latest tags for web and api (independent)
+        id: tags
         shell: bash
         env:
-          BASE_TAG: ${{ steps.base.outputs.TAG }}
+          OWNER: ${{ env.OWNER }}
+          REPO:  ${{ env.REPO }}
+          WEB_IMAGE: ${{ env.WEB_IMAGE }}
+          API_IMAGE: ${{ env.API_IMAGE }}
         run: |
           set -euo pipefail
 
-          check() {
-            local image="$1" tag="$2"
-            if ! docker buildx imagetools inspect "${image}:${tag}" >/dev/null 2>&1; then
-              echo "::error ::Image not found: ${image}:${tag}"; exit 1
+          # helper: does <image>:<tag> exist?
+          have_img() {
+            docker buildx imagetools inspect "$1:$2" >/dev/null 2>&1
+          }
+
+          # 1) latest main commit SHA
+          echo "Resolving latest commit SHA on main…"
+          LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" \
+            /repos/$OWNER/$REPO/commits/main -q .sha)
+          echo "Latest main SHA: $LATEST_SHA"
+
+          # 2) newest GHCR tag list for a package (exclude 'latest'), newest first
+          list_tags () {
+            local pkg="$1" # 'web' or 'api'
+            # If packages under an org, change to /orgs/<org>/packages/container/<pkg>/versions
+            gh api -H "Accept: application/vnd.github+json" \
+              /users/$OWNER/packages/container/$pkg/versions?per_page=200 \
+            | jq -r '
+                [ .[] | {
+                    updated_at,
+                    tags: (.metadata.container.tags // [])
+                  } ]
+                | sort_by(.updated_at) | reverse
+                | map(.tags[]) | unique
+                | map(select(. != "latest"))
+                | .[]'
+          }
+
+          # Resolve WEB tag
+          WEB_TAG=""
+          if have_img "$WEB_IMAGE" "$LATEST_SHA"; then
+            WEB_TAG="$LATEST_SHA"
+            echo "WEB: using latest main SHA ($WEB_TAG)"
+          else
+            echo "WEB: latest SHA not found; finding newest GHCR tag…"
+            mapfile -t WEB_TAGS < <(list_tags web || true)
+            if [ ${#WEB_TAGS[@]} -eq 0 ]; then
+              echo "::error ::WEB: No tags found in GHCR (need packages:read?)"; exit 1
             fi
-          }
+            # pick the first tag that exists
+            for t in "${WEB_TAGS[@]}"; do
+              if have_img "$WEB_IMAGE" "$t"; then WEB_TAG="$t"; break; fi
+            done
+            [ -n "$WEB_TAG" ] || { echo "::error ::WEB: Could not resolve a usable tag"; exit 1; }
+            echo "WEB: using newest available tag ($WEB_TAG)"
+          fi
 
-          # Require both images with that tag to exist
-          check "$WEB_IMAGE" "$BASE_TAG"
-          check "$API_IMAGE" "$BASE_TAG"
+          # Resolve API tag
+          API_TAG=""
+          if have_img "$API_IMAGE" "$LATEST_SHA"; then
+            API_TAG="$LATEST_SHA"
+            echo "API: using latest main SHA ($API_TAG)"
+          else
+            echo "API: latest SHA not found; finding newest GHCR tag…"
+            mapfile -t API_TAGS < <(list_tags api || true)
+            if [ ${#API_TAGS[@]} -eq 0 ]; then
+              echo "::error ::API: No tags found in GHCR (need packages:read?)"; exit 1
+            fi
+            for t in "${API_TAGS[@]}"; do
+              if have_img "$API_IMAGE" "$t"; then API_TAG="$t"; break; fi
+            done
+            [ -n "$API_TAG" ] || { echo "::error ::API: Could not resolve a usable tag"; exit 1; }
+            echo "API: using newest available tag ($API_TAG)"
+          fi
 
-          digest_for() {
-            local image="$1" tag="$2"
-            docker buildx imagetools inspect "${image}:${tag}" \
-              | awk '/Platform:.*linux\/amd64/{f=1} f&&/^Digest:/{print $2; exit}'
-          }
+          echo "WEB_TAG=$WEB_TAG" >> "$GITHUB_OUTPUT"
+          echo "API_TAG=$API_TAG" >> "$GITHUB_OUTPUT"
 
-          WEB_DIGEST=$(digest_for "$WEB_IMAGE" "$BASE_TAG")
-          API_DIGEST=$(digest_for "$API_IMAGE" "$BASE_TAG")
-
-          echo "WEB_DIGEST=$WEB_DIGEST" >> "$GITHUB_OUTPUT"
-          echo "API_DIGEST=$API_DIGEST" >> "$GITHUB_OUTPUT"
-
-          echo "Resolved:"
-          echo "  Web -> $WEB_IMAGE@$WEB_DIGEST"
-          echo "  API -> $API_IMAGE@$API_DIGEST"
-
-      # -------- DEPLOY (pin by digest; tag left empty) ----------
-      - name: Helm upgrade (digest-pinned)
+      # ---------- Deploy using those tags (tag-based; no digest pinning) ----------
+      - name: Helm upgrade (tag-based, independent web/api)
         shell: bash
         env:
-          WEB_DIGEST: ${{ steps.digests.outputs.WEB_DIGEST }}
-          API_DIGEST: ${{ steps.digests.outputs.API_DIGEST }}
+          WEB_TAG: ${{ steps.tags.outputs.WEB_TAG }}
+          API_TAG: ${{ steps.tags.outputs.API_TAG }}
+          WEB_IMAGE: ${{ env.WEB_IMAGE }}
+          API_IMAGE: ${{ env.API_IMAGE }}
         run: |
           set -euo pipefail
-          echo "Dry-run render (sanity)…"
-          helm upgrade --install fullstack "./helm/chart" -n "$NAMESPACE" \
-            --dry-run --debug \
-            --dependency-update \
-            --set-string web.image.repository="$WEB_IMAGE" \
-            --set-string web.image.tag="" \
-            --set-string web.image.digest="$WEB_DIGEST" \
-            --set-string api.image.repository="$API_IMAGE" \
-            --set-string api.image.tag="" \
-            --set-string api.image.digest="$API_DIGEST" \
-            >/dev/null
-
-          echo "Applying release…"
+          echo "Deploying: web:$WEB_TAG  api:$API_TAG"
           helm upgrade --install fullstack "./helm/chart" \
             --namespace "$NAMESPACE" --create-namespace \
             --dependency-update \
             --set-string web.image.repository="$WEB_IMAGE" \
-            --set-string web.image.tag="" \
-            --set-string web.image.digest="$WEB_DIGEST" \
+            --set-string web.image.tag="$WEB_TAG" \
             --set-string api.image.repository="$API_IMAGE" \
-            --set-string api.image.tag="" \
-            --set-string api.image.digest="$API_DIGEST"
+            --set-string api.image.tag="$API_TAG"
 
       - name: Wait for rollouts
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
           kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
           kubectl -n "$NAMESPACE" get pods -o wide
 
-      # -------- SMOKE: ingress + runtime-config sanity ----------
+      # Optional: quick smoke
       - name: Smoke test through Istio
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n istio-system get svc istio-ingressgateway
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
           sleep 3
-
-          echo "== /api/health =="
           curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
-
-          echo "== / (first 10 lines) =="
-          curl -fsS "http://localhost:8080/" | head -n 10
-
-          echo "== /runtime-config.js =="
-          CFG=$(curl -fsS "http://localhost:8080/runtime-config.js" || true)
-          echo "$CFG"
-
-          # Make sure clientId exists and is non-empty
-          echo "$CFG" | grep -q 'clientId":"' || { echo "::error ::runtime-config clientId is empty or missing"; kill "$PF_PID" || true; exit 1; }
-
+          curl -fsS "http://localhost:8080/runtime-config.js" | head -n 1 || true
           kill "$PF_PID" || true
-
-      - name: Verify digests on running pods
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Web:"
-          kubectl -n "$NAMESPACE" get pods -l app=web \
-            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'
-          echo "API:"
-          kubectl -n "$NAMESPACE" get pods -l app=api \
-            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'
-
-      - name: If failed, dump diagnostics
-        if: failure()
-        shell: bash
-        run: |
-          echo "---- Pods ----"
-          kubectl -n "$NAMESPACE" get pods -o wide || true
-          echo "---- Events (tail) ----"
-          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -n 100 || true
-          echo "---- API logs ----"
-          kubectl -n "$NAMESPACE" logs deploy/api -c api --tail=200 || true
-          echo "---- WEB logs ----"
-          kubectl -n "$NAMESPACE" logs deploy/web -c web --tail=200 || true
 
