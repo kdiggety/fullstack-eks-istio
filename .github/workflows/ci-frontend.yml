@@ -5,7 +5,7 @@ on:
     paths: ["frontend/**"]
   push:
     branches: [main]
-    tags: ["v*.*.*"]   # build on releases too
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,6 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/web
       TAG_FULL: ${{ github.sha }}
-      TAG_SHORT: ${{ github.sha }} # will set via step
 
     steps:
       - name: Checkout
@@ -40,12 +39,10 @@ jobs:
         run: npm ci
 
       - name: Build (Vite)
-        # NOTE: API base / OIDC config are provided at runtime; bundle is static
         working-directory: frontend
         run: npm run build
 
-      # Optional: artifact for PR previews
-      - name: Upload dist artifact
+      - name: Upload dist artifact (PRs)
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
@@ -54,14 +51,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Set release/short tags
-        id: rel
+      - name: Derive short/release tags
+        id: meta
         shell: bash
         run: |
+          echo "SHORT=${GITHUB_SHA:0,7}" >> "$GITHUB_OUTPUT"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "RELEASE_TAG=" >> "$GITHUB_OUTPUT"
           fi
-          echo "SHORT=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -73,17 +75,17 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push web image (linux/amd64)
+      - name: Build & Push web image (multi-arch)
         id: build_push
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
-          platforms: linux/amd64
+          platforms: linux/arm64,linux/amd64
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG_FULL }}
-            ${{ env.IMAGE }}:${{ steps.rel.outputs.SHORT }}
-            ${{ env.IMAGE }}:dev
+            ${{ env.IMAGE }}:${{ env.TAG_FULL }}          # immutable (preferred for deploy)
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }} # convenience; do NOT deploy from this
+            ${{ env.IMAGE }}:dev                           # mutable channel
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
           labels: |
@@ -91,23 +93,15 @@ jobs:
             org.opencontainers.image.source=${{ github.repository }}
 
       - name: Also tag with release tag (if present)
-        if: ${{ steps.rel.outputs.RELEASE_TAG != '' }}
+        if: ${{ steps.meta.outputs.RELEASE_TAG != '' }}
         run: |
           docker buildx imagetools create \
-            --tag $IMAGE:${{ steps.rel.outputs.RELEASE_TAG }} \
+            --tag $IMAGE:${{ steps.meta.outputs.RELEASE_TAG }} \
             $IMAGE:${{ env.TAG_FULL }}
 
-      - name: Show pushed digest
+      - name: Show pushed digest & platforms
         run: |
           echo "Digest: ${{ steps.build_push.outputs.digest }}"
-
-      # Optional: auto-trigger your deploy workflow with this exact tag
-      # - name: Trigger deploy (repository_dispatch)
-      #   if: ${{ github.ref == 'refs/heads/main' }}
-      #   uses: peter-evans/repository-dispatch@v3
-      #   with:
-      #     token: ${{ secrets.GITHUB_TOKEN }}
-      #     event-type: deploy-local
-      #     client-payload: |
-      #       {"tag":"${{ env.TAG_FULL }}"}
+          docker buildx imagetools inspect $IMAGE:${{ env.TAG_FULL }} | sed -n '/Platforms:/,/^$/p'
+          docker buildx imagetools inspect $IMAGE:dev | sed -n '/Platforms:/,/^$/p'
 
