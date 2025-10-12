@@ -9,7 +9,7 @@ on:
       - "backend/Dockerfile"
   push:
     branches: [main]
-    tags: ["v*.*.*"]               # build on releases too
+    tags: ["v*.*.*"]
     paths:
       - "backend/**"
       - ".github/workflows/ci-backend.yml"
@@ -84,7 +84,7 @@ jobs:
           else
             echo "buildx missing → installing CLI plugin fallback…"
             mkdir -p ~/.docker/cli-plugins
-            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"   # darwin / linux
+            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
             ARCH="$(uname -m)"
             case "$ARCH" in
               x86_64|amd64)   BX_ARCH=amd64 ;;
@@ -121,9 +121,9 @@ jobs:
           push: true
           platforms: linux/arm64,linux/amd64
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG_FULL }}           # immutable (preferred for deploy)
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }} # convenience (avoid for deploy)
-            ${{ env.IMAGE }}:dev                           # mutable channel
+            ${{ env.IMAGE }}:${{ env.TAG_FULL }}
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }}
+            ${{ env.IMAGE }}:dev
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
           labels: |
