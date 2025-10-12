@@ -9,7 +9,7 @@ on:
       - "backend/Dockerfile"
   push:
     branches: [main]
-    tags: ['v*.*.*']
+    tags: ["v*.*.*"]               # build on releases too
     paths:
       - "backend/**"
       - ".github/workflows/ci-backend.yml"
@@ -61,16 +61,46 @@ jobs:
             echo "RELEASE_TAG=" >> "$GITHUB_OUTPUT"
           fi
 
-      # --- REQUIRED: enable multi-arch + buildx before build-push ---
+      # --- Multi-arch prerequisites ---
       - name: Setup QEMU (multi-arch)
         uses: docker/setup-qemu-action@v3
 
-      - name: Setup Docker Buildx
+      - name: Setup Docker Buildx (container driver)
+        id: setup_buildx
         uses: docker/setup-buildx-action@v3
         with:
-          install: true           # makes `docker buildx` the default builder
+          install: true
+          use: true
+          driver: docker-container
+          buildkitd-flags: --debug
 
-      # Optional: isolate docker config to avoid stale creds on self-hosted runners
+      # --- Prove buildx exists; if not, install CLI plugin fallback ---
+      - name: Verify buildx (and fallback install if missing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx version >/dev/null 2>&1; then
+            echo "buildx present"
+          else
+            echo "buildx missing → installing CLI plugin fallback…"
+            mkdir -p ~/.docker/cli-plugins
+            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"   # darwin / linux
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64|amd64)   BX_ARCH=amd64 ;;
+              arm64|aarch64)  BX_ARCH=arm64 ;;
+              *) echo "::error ::Unsupported arch: $ARCH"; exit 1 ;;
+            esac
+            BX_VER="v0.16.2"
+            BX_URL="https://github.com/docker/buildx/releases/download/${BX_VER}/buildx-${BX_VER}.${OS}-${BX_ARCH}"
+            curl -fsSL "$BX_URL" -o ~/.docker/cli-plugins/docker-buildx
+            chmod +x ~/.docker/cli-plugins/docker-buildx
+            docker buildx version
+          fi
+          docker buildx ls || true
+          docker version || true
+
+      # Isolate Docker auth for this job (avoids stale creds on self-hosted)
       - name: Isolate Docker config for this job
         run: |
           mkdir -p "$RUNNER_TEMP/.docker"
@@ -91,9 +121,9 @@ jobs:
           push: true
           platforms: linux/arm64,linux/amd64
           tags: |
-            ${{ env.IMAGE }}:${{ env.TAG_FULL }}            # immutable (preferred for deploy)
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }} # convenience
-            ${{ env.IMAGE }}:dev                             # mutable channel
+            ${{ env.IMAGE }}:${{ env.TAG_FULL }}           # immutable (preferred for deploy)
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.SHORT }} # convenience (avoid for deploy)
+            ${{ env.IMAGE }}:dev                           # mutable channel
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
           labels: |
@@ -108,8 +138,11 @@ jobs:
             $IMAGE:${{ env.TAG_FULL }}
 
       - name: Show pushed digest & platforms
+        shell: bash
         run: |
           echo "Digest: ${{ steps.build_push.outputs.digest }}"
+          echo "Platforms (full SHA):"
           docker buildx imagetools inspect $IMAGE:${{ env.TAG_FULL }} | sed -n '/Platforms:/,/^$/p'
+          echo "Platforms (:dev):"
           docker buildx imagetools inspect $IMAGE:dev | sed -n '/Platforms:/,/^$/p'
 
