@@ -1,3 +1,14 @@
+name: Deploy Local K8s (Umbrella Helm)
+
+on:
+  push:
+    branches: [ main ]          # auto-trigger on merges/pushes to main
+  workflow_dispatch:            # allow manual runs from Actions UI/CLI
+
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   deploy:
     runs-on: [self-hosted, local-k8s]
@@ -23,6 +34,15 @@ jobs:
         with:
           clean: true
           fetch-depth: 0
+
+      - name: Check prerequisites (gh, jq, buildx)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null 2>&1 || { echo "::error ::gh CLI not found on runner"; exit 1; }
+          command -v jq >/dev/null 2>&1 || { echo "::error ::jq not found on runner"; exit 1; }
+          docker buildx version >/dev/null 2>&1 || { echo "::error ::docker buildx not available"; exit 1; }
+          echo "Prereqs OK"
 
       - name: Ensure kubectl context & namespace
         shell: bash
@@ -94,7 +114,7 @@ jobs:
           # 2) newest GHCR tag list for a package (exclude 'latest'), newest first
           list_tags () {
             local pkg="$1" # 'web' or 'api'
-            # If packages under an org, change to /orgs/<org>/packages/container/<pkg>/versions
+            # If packages are under an org, change to /orgs/<org>/packages/container/<pkg>/versions
             gh api -H "Accept: application/vnd.github+json" \
               /users/$OWNER/packages/container/$pkg/versions?per_page=200 \
             | jq -r '
@@ -183,7 +203,9 @@ jobs:
           kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
           sleep 3
+          echo "== /api/health =="
           curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
+          echo "== /runtime-config.js (first line) =="
           curl -fsS "http://localhost:8080/runtime-config.js" | head -n 1 || true
           kill "$PF_PID" || true
 
