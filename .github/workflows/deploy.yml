@@ -98,6 +98,15 @@ jobs:
           ls -l charts || true
           popd >/dev/null
 
+      - name: Show currently deployed images (before)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Web (before):"
+          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}' || true
+          echo "API (before):"
+          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}' || true
+
       # ---------- Resolve LATEST TAGS INDEPENDENTLY (web & api) ----------
       - name: Resolve latest tags for web and api (independent)
         id: tags
@@ -136,7 +145,6 @@ jobs:
                 | .[]'
           }
 
-          # 1) latest main commit SHA
           echo "Resolving latest commit SHA on main…"
           LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" \
             "/repos/$OWNER/$REPO/commits/main" -q .sha)
@@ -150,7 +158,6 @@ jobs:
           else
             echo "WEB: latest SHA not found; finding newest GHCR tag…"
             WEB_TAG=""
-            # portable read loop (works on bash 3+)
             while IFS= read -r t; do
               [ -z "$t" ] && continue
               if have_img "$WEB_IMAGE" "$t"; then
@@ -187,33 +194,105 @@ jobs:
             echo "API: using newest available tag ($API_TAG)"
           fi
 
+          echo "Resolved tags:"
+          echo "  web: $WEB_TAG"
+          echo "  api: $API_TAG"
           echo "WEB_TAG=$WEB_TAG" >> "$GITHUB_OUTPUT"
           echo "API_TAG=$API_TAG" >> "$GITHUB_OUTPUT"
 
-      # ---------- Deploy using those tags (tag-based; no digest pinning) ----------
-      - name: Helm upgrade (tag-based, independent web/api)
+      - name: Decide pull policies & mutate flags
+        id: mutate
         shell: bash
         env:
           WEB_TAG: ${{ steps.tags.outputs.WEB_TAG }}
           API_TAG: ${{ steps.tags.outputs.API_TAG }}
         run: |
           set -euo pipefail
-          echo "Deploying: web:$WEB_TAG  api:$API_TAG"
+          is_mutable() {
+            case "$1" in
+              dev|latest) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          WEB_PULL=IfNotPresent
+          API_PULL=IfNotPresent
+          WEB_FORCE_RESTART=false
+          API_FORCE_RESTART=false
+
+          if is_mutable "$WEB_TAG"; then
+            WEB_PULL=Always
+            WEB_FORCE_RESTART=true
+          fi
+          if is_mutable "$API_TAG"; then
+            API_PULL=Always
+            API_FORCE_RESTART=true
+          fi
+
+          echo "WEB_PULL=$WEB_PULL" >> "$GITHUB_OUTPUT"
+          echo "API_PULL=$API_PULL" >> "$GITHUB_OUTPUT"
+          echo "WEB_FORCE_RESTART=$WEB_FORCE_RESTART" >> "$GITHUB_OUTPUT"
+          echo "API_FORCE_RESTART=$API_FORCE_RESTART" >> "$GITHUB_OUTPUT"
+
+          echo "Decisions:"
+          echo "  web: tag=$WEB_TAG pullPolicy=$WEB_PULL restart=$WEB_FORCE_RESTART"
+          echo "  api: tag=$API_TAG pullPolicy=$API_PULL restart=$API_FORCE_RESTART"
+
+      - name: Helm upgrade (tag-based, independent web/api)
+        shell: bash
+        env:
+          WEB_TAG: ${{ steps.tags.outputs.WEB_TAG }}
+          API_TAG: ${{ steps.tags.outputs.API_TAG }}
+          WEB_PULL: ${{ steps.mutate.outputs.WEB_PULL }}
+          API_PULL: ${{ steps.mutate.outputs.API_PULL }}
+        run: |
+          set -euo pipefail
+          echo "Deploying:"
+          echo "  web: $WEB_IMAGE:$WEB_TAG (pullPolicy=$WEB_PULL)"
+          echo "  api: $API_IMAGE:$API_TAG (pullPolicy=$API_PULL)"
+
           helm upgrade --install fullstack "./helm/chart" \
             --namespace "$NAMESPACE" --create-namespace \
             --dependency-update \
             --set-string web.image.repository="$WEB_IMAGE" \
             --set-string web.image.tag="$WEB_TAG" \
+            --set-string web.image.pullPolicy="$WEB_PULL" \
             --set-string api.image.repository="$API_IMAGE" \
-            --set-string api.image.tag="$API_TAG"
+            --set-string api.image.tag="$API_TAG" \
+            --set-string api.image.pullPolicy="$API_PULL"
+
+      - name: Force rollout restart for mutable tags (if needed)
+        if: ${{ steps.mutate.outputs.WEB_FORCE_RESTART == 'true' || steps.mutate.outputs.API_FORCE_RESTART == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.mutate.outputs.WEB_FORCE_RESTART }}" = "true" ]; then
+            echo "Rolling out web (mutable tag)…"
+            kubectl -n "$NAMESPACE" rollout restart deploy/web
+          fi
+          if [ "${{ steps.mutate.outputs.API_FORCE_RESTART }}" = "true" ]; then
+            echo "Rolling out api (mutable tag)…"
+            kubectl -n "$NAMESPACE" rollout restart deploy/api
+          fi
 
       - name: Wait for rollouts
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s
-          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s
-          kubectl -n "$NAMESPACE" get pods -o wide
+          kubectl -n "$NAMESPACE" rollout status deploy/web --timeout=300s || true
+          kubectl -n "$NAMESPACE" rollout status deploy/api --timeout=300s || true
+
+      - name: Show deployed images (after)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Web (after):"
+          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+          echo "API (after):"
+          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+          echo
+          kubectl -n "$NAMESPACE" get pods -l app=web -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].image}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}' || true
+          kubectl -n "$NAMESPACE" get pods -l app=api -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].image}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}' || true
 
       # Optional: quick smoke
       - name: Smoke test through Istio
