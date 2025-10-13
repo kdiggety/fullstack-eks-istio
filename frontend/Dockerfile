@@ -2,22 +2,29 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Accept backend base URL as a build argument
+# Optional: only if you truly bake an API base at build-time
+# (If you use runtime-config.js, you can remove these two lines)
 ARG VITE_API_BASE_URL
-# Expose it as an environment variable for Vite
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY package*.json ./
 RUN npm ci
+
+# Copy the rest of the source
 COPY . .
 
-# Vite will read any env var prefixed with VITE_
-RUN npm run build
+# Ensure a clean slate, then build
+RUN rm -rf dist && npm run build
+
+# Guardrail: FAIL if GIS appears in the built output
+RUN ! grep -RniE 'accounts\.google\.com/gsi|google\.accounts\.id|g_id_onload' dist || \
+    (echo 'ERROR: GIS detected in build output. Remove the GIS script and rebuild.' && exit 1)
 
 # --- serve static ---
 FROM nginx:1.27-alpine
-# Copy your custom Nginx server config (overwrites the image default)
+# Your nginx.conf should handle caching assets but not runtime-config.js
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Copy the built assets
+
+# Copy the built site
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
