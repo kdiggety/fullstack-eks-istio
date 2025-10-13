@@ -58,9 +58,9 @@ r.post("/auth/callback", async (req, res) => {
     }
 
     const OIDC_CLIENT_ID =
-      process.env.OIDC_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+      process.env.oidcClientId || process.env.OIDC_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
     const OIDC_CLIENT_SECRET =
-      process.env.OIDC_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+      process.env.oidcClientSecret || process.env.OIDC_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 
     if (!OIDC_CLIENT_ID || !OIDC_CLIENT_SECRET) {
       return res.status(500).json({

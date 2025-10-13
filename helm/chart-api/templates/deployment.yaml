@@ -25,6 +25,10 @@ spec:
             - name: http
               containerPort: {{ .Values.containerPort }}
           env:
+            - name: oidcClientId
+              valueFrom: { secretKeyRef: { name: api-env, key: oidcClientId } }
+            - name: oidcClientSecret
+              valueFrom: { secretKeyRef: { name: api-env, key: oidcClientSecret } }
             - name: oidcIssuerPrimary
               valueFrom: { secretKeyRef: { name: api-env, key: oidcIssuerPrimary } }
             - name: oidcIssuerAlt

@@ -112,10 +112,10 @@ web:
     limits:
       cpu: "250m"
       memory: "256Mi"
+
   runtimeConfig:
     googleClientId: "757483491986-s6es27343115bs05medv52v506cg81b0.apps.googleusercontent.com"
     apiBase: "/api"
-
 
 # -----------------------------------------------------------------------------
 # Istio ingress layer — your chart aliased as `istio`
@@ -139,11 +139,11 @@ istio:
       # Optional: limit to certain Google Workspace domains
       # hostedDomains: ["example.com"]
 
-
 # -----------------------------------------------------------------------------
 # SealedSecrets — your chart aliased as `secrets`
 # These ciphertexts are produced by `kubeseal` and render to:
 #   - Secret web-env    with key: API_BASE
+#   - Secret api-env    with keys: oidc* (incl. clientId/clientSecret)
 #   - Secret redis-auth with key: redis-password
 # Commit ciphertext safely; never commit raw secrets.
 # -----------------------------------------------------------------------------
@@ -151,9 +151,13 @@ secrets:
   sealed:
     webEnv:
       apiBase: "AgBu4+vjaRixukKUERRKltDxrjeCBzBewwHjznxVoQK2c/var3rwGcEvp2+jM6bblxs6fq7mlfEFPjOAa0E/UugOStl7AywMWsF7TLA/GKzIqGt/Geumwva5cXdqFhid+25+d0t1aRtIbJK5o/bATQi184HemLPgO3AzO+2V96xUDxbCGhtbHG2/M9rrY5ZCpOhkSLaPOQk2yHV7ENTI0x9z8Bbf0VgSuIpdkYQc8y4IEhtedn0lT5E86X8+mwlw5Hw3sefDYOiD/dZrplFB8d5+op5osi9PCd1s42/x6BXYVyVOI4gFVN+Oi29ROHPGlUh3xsN5V03xPNV0dzzombDy+I3UBf7H4GavwID0BFNHaoz8huhS8kKjPdRd0pi4QvmzWYtbvycwpSkemxXDBoHeiePAT8tWgXpKUd9BFhbxAWkCNDSekvGZk9FC2lNcKBy0Myl9pWG9H8/KPlzI54q4U0Zbz+oU7Sa459zfrfCnkky3/tl3hxDXrZGOz2ySF7hLzIfPx49l3ESvLnTruqXmgqp9HTGVq64FwYHS8gUkI9fD+9AZBPK06m2fn4rJlyY9tBIjLAkfjhPBtJ4edFysUDdujQ8IXVXdhAFrccHoNKY29gk4fNjKG7xLJBFFemSJ+25N9M5PcT8ZeIaC+ofnSSfBjfP1fJa7DByFgH5qhcvVM5knU+uRWCryWFCHOjseYz7n"
+
     apiEnv:
+      oidcClientId: "AgAkA+xGeo2Awalnw3MKGxCUtQ/uZp434RnnWS3Cj9RYPalMcd+NbScBceKPJVV9uzfgJG6QjrXNxTnms11mCmhpIPRUFebdHrFGRZQVCKVcRLekgexGS+SiHxJcpLEQbmFr6Yo3vfXTVH0JR8Th5mmwromBGgo9fu0dCx7Z9DrrTxmxmdFqyOaf0HdpK39MZowseHcWsl4sAoKX8kNaEj9W3EwSpFptLi6yaWHfAGpe4wohT7v/ZHm5XeiN89QTK3pLQUr0AZcADYX4iZm8qvLb2ZcVOLGyOVHufTcxeeK4o18seDvf+ZqOjHI5Q86NPBX1L67y0zkDUGVtwvnfevTOmUKSF8P8mKu1Xvl+ZVkeFKL0iWKHneJMWs/lCj42b2imJZQqwZQqFbX8kWWvo83+m9RjCujYekvrTZm+8uwIAfQZUFz9H/8D6id1ksni1+sknuN4mfWruAXAxvpNYTtxer41EfOJhnvOLrPpr2NQK9XvXQsj8tPgbTGxqXgdBM83g6sfbqKKgdnKGhQ8/d6XsQ9ZnHuMW0rsqhZFedvwH+2qaqZ7DOrrMJxrr1PHc5pUVi3Pvmet8CfatOwLHU4zVO9RiqTmA3XBAER76TzealIiSeHuCqzrgbTSTb4zMbEVuta8/B0hEzziPDsuWMxqsJ+mcWd1hXtO7VT4+w69NOlY3IFdIpKwJ5YF4Y99qfuRzHxjiBb3lnzjwozIGjcqrSJgl2u+smIUqpEIURD9/i3llP0Wca9w/n87W1zqVtxGqMmF9YiehlrP4Z5l1Ys1N3uVPKl70NA="
+      oidcClientSecret: "AgBCqC7Se2JCrtnbix79StqrU6EzRzaCvNzbU2ud0CQQ7iy1wdGIN9UrRMK+7eLuUh5JGssVQHH0heiV8k0cR0sWY4DWyrI6YwT4h3s43j3C6x8z6Z+c2MsWeuTA+Bz5KqnVeY50YsWSIa6akrbrOxOvFj9GaYs7r8zZJs+CUUiQgsUvys7eilOjjIC/or6eesG/IaXYzO8QWootmo2hTwyW68Z1cW81nSQLpNE2w7/zxDT6aBvlL629QXPN763nOGn1BDtp5F+jkMEPBfE8yj7HnLoV6vnb51vygMFkEsmFB8y/+GtAzdYH5abBkD/ffVf0Ur7fxR+tpUeUIqelIc4pltqAnqKLdXc6lGoyUWXSyzWroJUGs+6jCrN4r+FYZ/uv8Tnh9QRrw6LxbCLSQV3+P+mdiWSPu5ieMFW7QH3Lhgxx9ORcmE7RWDVFMsGWoku608puQs/XmgKVJkMe778XsPg79Cpjvq8ybFS+OWYDIQGU3+EfIK5yxYMqpO4QM+XA55v9XlqohkgcCWyGBsk9t5BDUf8G81Q6bxkiwASg5WyY+lOiCWcO0a0CU49BWldvBBoKqDZEmFZnQdfvMWKC2b745symWb8tZI1sOD9E1iihYs/UByfUS39oZ7GvTowFYU4p//Xku02PFKXtx23pVQA96GM4b+JwMxfTAWVHrggLNCuToTB0txm2/j9JMzycXSf+Sy4D5sl6erS54UBHajbBfYAlJdADTWpqsGPWzmc00Q/S6PJH"
       oidcIssuerPrimary: "AgChWlh+AdAZOnSkSLK1VN6tTVBpN7bcg7drAZw7OYRD2R2gy5SNYwKLic9r+koDHqwi7EVp6nxBGCaXU97OagdRglYAtRoFAQRbmYno8Ebm71Sdfj5P21U7zDOiDme8oN5ga/Te9EH5E7zreUBHnz4WkotL7F+I3e9+ZSjTjb9j/IoqWDI+RYoSfzccnymBP+M7jt8JQr7TNZHwD8N6/d4AHHJ0DSp1gZwaYWg4kZ4H9ldvqOCjbcCq38qtYO5dciDvHq0uKoGEMmTgqP4FAaBkXn4aFu/SuzODikVVbOmSooTV76eV8lY+u0Y1oIRKNOcsvjvvoKtLo9PFJByk9BufAdPiqtqbmhDT4RbC7znP6Qs5e5PRZ70m55ctYBX7zRXf4W6QDrJC4z1+85nN/swvPAayAnN7AH64tBekole32MhurCOdyerZvydpXANur6z44jo9y92wSUWyhih459YXILXU3exXkLlZhOOIzQmUZYVnwund/gFcNZ+ZiOgtsZWKZ1+73+HsE2ZflECTUmz9IZDM/zeqM87+oeCMfOD5M6no1naJmp+D5Eu7HoYyUT2BBR7W+4U8j1RdedJvcDHx29croKhOCaf/Eu6jtrTjGcyHAHigCvSO3VLCYHfNFEk+M99bAKvuvoFyrCMiq8Aa92IquaLQA/ZzSpcjBEGKYhJyf4nCTGeIuTTOIjXaXz06PyobaHWLcHmaSpvrbCkmz5i2Qvf7UUgYsug="
       oidcIssuerAlt:     "AgBchDoftZ/2KJikQLOqz4hjydIYv0dOKwn2wtq1gHDSgju2GPxDD1PWHbemai+weaJffbPyE7jv2RCOV2Q77XXUocO4h9bezttbiK4XbNxPlbnNwF+6aZJAnCFKoGWHxdE5Jf9kO1HEXLnez90qXlkBBpGBNomXZQyuos70+SCEnGPoCCH4ParCUReXx2XSX6WGSNbXQiHNAfTHyzSvaYZYenbNCoZix3KeM96wRU2x6fsoopNl1rS7u786wEvkKgF/Cq0GmeLtBnD2XQ8Q+mOtDJzh4I2J4PkGYKM69w1aMKSK5+A9+VCjW1S2RD+IULSQjcqtSFplMpEttZEVE14muGeq4upYus8hz2ifFxmrKD21VsehxAE9rrS5nH58D3PpjhMTOhRWqxHCxUgsxUaI4/Ia6Fa41aYpZozH8rzuri5wVXbIrmC20NeQ+ow7zY8XM60LfkHHjT6lj50DK2JptDb6tuWzAUc9uDVT4WW0sMmtw8u2bZuf5+xdqkN5YREipUTh/HuijGOepYZXrtN24ssTRofzh7QhBjSmVKj519E8rPr/wcILg3rDhH3O7FPAzyh2SVvRn6IiU4pjWns3/jg6cTjnN1XboqxaPjWyGF1B1GCNSE0UVS4N0TORS2g4txq5gK3vWV6IsDu0gsw1iUHUpe6Co5VHBb3Hto/4tiDRRIuUsiEUI3Z4ivJn76Mow0acS0ClIICRa5L9felY684/"
       oidcAudience:      "AgAG/ouRTvLvMdPBFs5KCZrVMIHpXPMdauA7SuNwwIFNQLb7na58o6ZoYL7CSvtogcV1N7VTDPf6kc/WwzU/1iHP9qsicf0Duwnbls4JL8/nTJ8kFj6Mw85/HSM2sa8NNNB6KHm2sH++gt+FGAWA87FLJHCshKKKNMBfsVJUHQFjvJvygj2VTt/HYRDC1um3BCwvIQkQc+pucrS/uWalT59IWMouQHxOZ3zVlSvjHXAjW/3SWKuYeOFTXoQRnJpLSUKw9ludY/jvjb3+TF002PgZM6NDnKx+RsvYaYKlFJRMU5Byimlwu4zKAglAyXhDpA9KZV2UDuSSatDFd+v2ge9WCwoLfsYQXR6eQSJHIhnhISp1oySgfFTXmQpVzAp7hHQG9TluOHh+JZPB5SHM7ixDxHCin7ILGynGGVT9cleoIVGaJn3HSkuUj0XsoXX9FJK8/mqVa8J4Siil80oPNxrZGoNN0w/p/FAe3rfh/Sgh/ROTFCr4y0p/sUFm6dN/25L4qcSU5r6xaz3dLtk83YzFEFCwKYAsfcYPquBHVqk3haNzmJGdPT/JyCUhxVuuV9PEojED/VlGUKkxX2aEywSFUhIioNTzbfXv91+BX7qWRnqm459CuHvfWP+EYPwpr/B03yshDLLHQ12WKpEhqlaumR/hQUak6VfZlbAD+6TxzujtzjzqrMd4r1yKDfPo0bJSJZyenowWL8cTCA+JAbzahXW2UevMPAR7TfpmQeaJdJ7YEDz8dGhO3b1lxX+ygwGZEcYD9SDiAgmecDVkw38cE+0zszBxQe8="
+
     redisAuth:
       redis-password: "AgAHrPndmJB5ddNZ7UE29xGvS7O3StmNhd9n0FbfasZUSp0saMmyC5+JrbO5rcs6afKfkV4o4LZDOdNzzdkPhraB5wsvmGv9/6TPIyS6ptrqapEVAHwxbqWKVm4BN8tG5NsNkMNdPOYnzm4SvVmts/gQ6eRJNvN4KBlxRGjIE7mOf4MohC+lYbRPJMFkVlN39hfdeugDGfPzltl7ggS5eSTZhHlpONbRYnyuuIJ4H0MPo+Xz8UKy3Bz1b3NA0Y89bzGGa9Ko5TKnly7Kn40IGwCWUM/Z10cnweDbCgs6s+PJwXZTbo4WYC7Y+vCOLKGH/4AjlDuIyNBjCqcwPxHsh10+3E0WPohZRd3A1kdD9UkD6X4ZlSMPQ+hlvttARYCyILt4pD7nSbqr4Mg/doBpFJsA/PlYMdp6a/lLm3lNk0VGfWRZSBUAPzZ9gr2EBi6lSxgILB+/PECbh4xxXQXgbJhkgWC7+nTsPWBCiB2XluJu/wQoqxXNUNg0gym6yqVSor9BU7f2/WYLR/r7RIYDCe4pCNYEDC8jUuRaEGRjeQyEgiiwHkIg/t+s6TZc9dom0iGoZcl0vWKKT4h8BbFEjcywYgK4yh5dQlC9RLp1x7kDyXCxvMml51XRLLr6IgI2Z6yRFLwYxAz9AnAvfcNHFmaRrEuCMcQFvVrDCejpSsfhrfe07SPd3P+fS8U5GkHDqAhMr/DqKtXtQwhi3+BiaVkSoOKe"
