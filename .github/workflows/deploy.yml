@@ -103,9 +103,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "Web (before):"
-          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}' || true
+          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[?(@.name=="web")].image}{"\n"}' || true
           echo "API (before):"
-          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}' || true
+          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].image}{"\n"}' || true
 
       # ---------- Resolve LATEST TAGS INDEPENDENTLY (web & api) ----------
       - name: Resolve latest tags for web and api (independent)
@@ -114,12 +114,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          # helper: does <image>:<tag> exist?
           have_img() {
             docker buildx imagetools inspect "$1:$2" >/dev/null 2>&1
           }
 
-          # pick correct packages API path
           gh_pkg_url() {
             local pkg="$1"
             if [ "${GH_PACKAGES_SCOPE:-user}" = "org" ]; then
@@ -129,70 +127,49 @@ jobs:
             fi
           }
 
-          # newest GHCR tag list for a package (exclude 'latest'), newest first
+          # Ordered tag candidates: prefer 40-hex SHA tags first (immutable), then others; newest first by version.updated_at
           list_tags () {
-            local pkg="$1" # 'web' or 'api'
+            local pkg="$1"
             local url; url="$(gh_pkg_url "$pkg")"
             gh api -H "Accept: application/vnd.github+json" "$url" \
             | jq -r '
-                [ .[] | {
-                    updated_at,
-                    tags: (.metadata.container.tags // [])
-                  } ]
-                | sort_by(.updated_at) | reverse
-                | map(.tags[]) | unique
-                | map(select(. != "latest"))
-                | .[]'
+                [ .[] as $v
+                  | ($v.metadata.container.tags // [])
+                  | map(select(. != "latest" and . != "dev"))
+                  | map({updated_at: $v.updated_at, tag: .})
+                ] | add
+                | ( [ .[] | select(.tag | test("^[0-9a-f]{40}$")) ] | sort_by(.updated_at) | reverse | .[]?.tag ),
+                  ( [ .[] | select(.tag | test("^[0-9a-f]{40}$") | not) ] | sort_by(.updated_at) | reverse | .[]?.tag )
+              '
           }
 
           echo "Resolving latest commit SHA on main…"
-          LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" \
-            "/repos/$OWNER/$REPO/commits/main" -q .sha)
+          LATEST_SHA=$(gh api -H "Accept: application/vnd.github+json" "/repos/$OWNER/$REPO/commits/main" -q .sha)
           echo "Latest main SHA: $LATEST_SHA"
 
-          # ---- Resolve WEB tag (prefer latest SHA, else newest available tag) ----
-          WEB_TAG=""
-          if have_img "$WEB_IMAGE" "$LATEST_SHA"; then
-            WEB_TAG="$LATEST_SHA"
-            echo "WEB: using latest main SHA ($WEB_TAG)"
-          else
-            echo "WEB: latest SHA not found; finding newest GHCR tag…"
-            WEB_TAG=""
+          resolve_for() {
+            local image="$1" pkg="$2"
+            local chosen=""
+            # First: try the current main SHA
+            if have_img "$image" "$LATEST_SHA"; then
+              echo "$LATEST_SHA"
+              return 0
+            fi
+            # Else: iterate ordered candidates (newest first)
             while IFS= read -r t; do
               [ -z "$t" ] && continue
-              if have_img "$WEB_IMAGE" "$t"; then
-                WEB_TAG="$t"
-                break
-              fi
-            done < <(list_tags web || true)
-            if [ -z "$WEB_TAG" ]; then
-              echo "::error ::WEB: Could not resolve a usable tag (need packages:read? are tags present?)"
-              exit 1
-            fi
-            echo "WEB: using newest available tag ($WEB_TAG)"
-          fi
+              if have_img "$image" "$t"; then chosen="$t"; break; fi
+            done < <(list_tags "$pkg" || true)
 
-          # ---- Resolve API tag (prefer latest SHA, else newest available tag) ----
-          API_TAG=""
-          if have_img "$API_IMAGE" "$LATEST_SHA"; then
-            API_TAG="$LATEST_SHA"
-            echo "API: using latest main SHA ($API_TAG)"
-          else
-            echo "API: latest SHA not found; finding newest GHCR tag…"
-            API_TAG=""
-            while IFS= read -r t; do
-              [ -z "$t" ] && continue
-              if have_img "$API_IMAGE" "$t"; then
-                API_TAG="$t"
-                break
-              fi
-            done < <(list_tags api || true)
-            if [ -z "$API_TAG" ]; then
-              echo "::error ::API: Could not resolve a usable tag (need packages:read? are tags present?)"
+            if [ -z "$chosen" ]; then
+              echo "::error ::$pkg: Could not resolve a usable tag (need packages:read? are tags present?)"
               exit 1
             fi
-            echo "API: using newest available tag ($API_TAG)"
-          fi
+            echo "$chosen"
+          }
+
+          WEB_TAG="$(resolve_for "$WEB_IMAGE" web)"
+          API_TAG="$(resolve_for "$API_IMAGE" api)"
 
           echo "Resolved tags:"
           echo "  web: $WEB_TAG"
@@ -287,14 +264,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "Web (after):"
-          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+          kubectl -n "$NAMESPACE" get deploy web -o jsonpath='{.spec.template.spec.containers[?(@.name=="web")].image}{"\n"}'
           echo "API (after):"
-          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+          kubectl -n "$NAMESPACE" get deploy api -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].image}{"\n"}'
           echo
-          kubectl -n "$NAMESPACE" get pods -l app=web -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].image}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}' || true
-          kubectl -n "$NAMESPACE" get pods -l app=api -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].image}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}' || true
+          kubectl -n "$NAMESPACE" get pods -l app=web -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[?(@.name=="web")].image}{"\t"}{.status.containerStatuses[?(@.name=="web")].imageID}{"\n"}{end}' || true
+          kubectl -n "$NAMESPACE" get pods -l app=api -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[?(@.name=="api")].image}{"\t"}{.status.containerStatuses[?(@.name=="api")].imageID}{"\n"}{end}' || true
 
-      # Optional: quick smoke
       - name: Smoke test through Istio
         shell: bash
         run: |
