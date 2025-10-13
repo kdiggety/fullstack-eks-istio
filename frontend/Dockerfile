@@ -2,10 +2,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Optional: only if you truly bake an API base at build-time
-# (If you use runtime-config.js, you can remove these two lines)
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# default only if CI doesn't pass one
+ARG BUILD_REF=dev
+# creates a layer that depends on BUILD_REF
+ENV BUILD_REF=${BUILD_REF}
 
 COPY package*.json ./
 RUN npm ci
