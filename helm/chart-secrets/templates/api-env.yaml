@@ -5,6 +5,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   encryptedData:
+    oidcClientId: "{{ .Values.sealed.apiEnv.oidcClientId }}"
+    oidcClientSecret:     "{{ .Values.sealed.apiEnv.oidcClientSecret }}"
     oidcIssuerPrimary: "{{ .Values.sealed.apiEnv.oidcIssuerPrimary }}"
     oidcIssuerAlt:     "{{ .Values.sealed.apiEnv.oidcIssuerAlt }}"
     oidcAudience:      "{{ .Values.sealed.apiEnv.oidcAudience }}"
