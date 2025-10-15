@@ -52,25 +52,29 @@ r.post("/auth/callback", async (req, res) => {
     if (!code || !code_verifier || !redirect_uri || !client_id) {
       return res.status(400).json({
         error: "invalid_request",
-        error_description:
-          "Required fields: code, code_verifier, redirect_uri, client_id",
+        error_description: "code, code_verifier, redirect_uri, client_id required",
       });
     }
 
-    const OIDC_CLIENT_ID =
-      process.env.oidcClientId || process.env.OIDC_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
-    const OIDC_CLIENT_SECRET =
-      process.env.oidcClientSecret || process.env.OIDC_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+    const CLIENT_ID =
+      process.env.oidcClientId ||
+      process.env.OIDC_CLIENT_ID ||
+      process.env.GOOGLE_CLIENT_ID;
 
-    if (!OIDC_CLIENT_ID || !OIDC_CLIENT_SECRET) {
+    const CLIENT_SECRET =
+      process.env.oidcClientSecret ||
+      process.env.OIDC_CLIENT_SECRET ||
+      process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!CLIENT_ID || !CLIENT_SECRET) {
       return res.status(500).json({
         error: "server_misconfig",
-        error_description: "OIDC_CLIENT_ID/SECRET not set on server",
+        error_description: "OIDC client id/secret not set",
       });
     }
 
-    // Optional safety: ensure SPA’s client_id matches server’s config
-    if (client_id !== OIDC_CLIENT_ID) {
+    // Optional safety: ensure SPA client_id matches backend's client id
+    if (client_id !== CLIENT_ID) {
       return res.status(400).json({
         error: "invalid_request",
         error_description: "client_id mismatch",
@@ -82,28 +86,26 @@ r.post("/auth/callback", async (req, res) => {
       code,
       code_verifier,
       redirect_uri,
-      client_id: OIDC_CLIENT_ID,
-      client_secret: OIDC_CLIENT_SECRET, // <-- add secret on server
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET, // body auth
     });
+
+    const basic = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
 
     const resp = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: `Basic ${basic}`, // Basic auth as well
+      },
       body: params.toString(),
     });
 
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      // Pass through Google’s error and status
-      return res.status(resp.status).json(json);
-    }
-
-    // json contains: access_token, id_token, expires_in, token_type, scope, …
+    if (!resp.ok) return res.status(resp.status).json(json);
     return res.json(json);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ error: "server_error", message: err.message });
+    return res.status(500).json({ error: "server_error", message: err.message });
   }
 });
 
