@@ -66,10 +66,14 @@ export default function AuthProvider({ children }) {
   const claims = useMemo(() => (idToken ? decodeJwt(idToken) : null), [idToken]);
   const user = useMemo(() => (claims ? { sub: claims.sub, email: claims.email } : null), [claims]);
 
-  // Simple expiry guard on mount / clientId change
+  // On mount / client change: purge if expired
   useEffect(() => {
-    if (!accessToken && !idToken) return;
-    if (isExpiredAt(expiresAt)) {
+    // Use earliest of ID token exp and access token expiry
+    const idExpMs = claims?.exp ? claims.exp * 1000 : null;
+    const atExpMs = expiresAt ? Number(expiresAt) : null;
+    const earliest = [idExpMs, atExpMs].filter(Boolean).sort((a, b) => a - b)[0];
+
+    if (earliest && isExpiredAt(earliest)) {
       localStorage.removeItem(ACCESS_TOKEN_KEY);
       localStorage.removeItem(ID_TOKEN_KEY);
       localStorage.removeItem(EXPIRES_AT_KEY);
@@ -88,7 +92,27 @@ export default function AuthProvider({ children }) {
       reauthTimer.current = null;
     }
   };
-  useEffect(() => () => clearReauthTimer(), []);
+
+  useEffect(() => {
+    clearReauthTimer();
+    if (!idToken) return;
+
+    const idExpMs = claims?.exp ? claims.exp * 1000 : null;
+    const atExpMs = expiresAt ? Number(expiresAt) : null;
+    const earliest = [idExpMs, atExpMs].filter(Boolean).sort((a, b) => a - b)[0];
+    if (!earliest) return;
+
+    // renew 60s before expiry
+    const RENEW_MARGIN_MS = 60_000;
+    const delay = Math.max(0, earliest - Date.now() - RENEW_MARGIN_MS);
+
+    reauthTimer.current = setTimeout(() => {
+      // This re-runs the Authorization Code + PKCE flow (redirects to Google)
+      signIn();
+    }, delay);
+
+    return () => clearReauthTimer();
+  }, [idToken, claims?.exp, expiresAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // === Public API ===
 
