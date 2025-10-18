@@ -1,0 +1,10 @@
+llmGateway: { enabled: true, image: { tag: dev } }
+retriever:  { enabled: true, image: { tag: dev } }
+anomalyScorer: { enabled: true, image: { tag: dev } }
+minio: { enabled: true }
+argo: { enabled: true }
+kserveModels: { enabled: true }
+meshMl:
+  enabled: true
+  host: llm.dev.example.local
+  gateway: istio-system/main-gateway

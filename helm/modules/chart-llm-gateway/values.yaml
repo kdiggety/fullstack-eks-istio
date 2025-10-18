@@ -1,0 +1,15 @@
+image:
+  repository: ghcr.io/your-org/llm-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  port: 8080
+config:
+  provider: bedrock
+  allowModels:
+    - anthropic.claude-3-5-sonnet
+    - gpt-4.1-mini
+redis:
+  url: redis://fullstack-redis-master.sample.svc.cluster.local:6379
+opensearch:
+  endpoint: http://opensearch.ml.svc.cluster.local:9200

@@ -1,0 +1,13 @@
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: oidc-ml
+  namespace: ml
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.appLabel | quote }}
+  jwtRules:
+    - issuer: {{ .Values.oidc.issuer | quote }}
+      audiences: {{ .Values.oidc.audiences | toJson }}
+      jwksUri: {{ .Values.oidc.jwksUri | quote }}

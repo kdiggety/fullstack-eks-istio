@@ -1,0 +1,11 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: reranker
+  namespace: ml
+spec:
+  predictor:
+    model:
+      modelFormat: { name: pytorch }
+      storageUri: s3://ml-artifacts/reranker/
+      runtime: kserve-pytorchserver

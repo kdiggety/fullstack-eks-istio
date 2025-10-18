@@ -1,0 +1,18 @@
+host: llm.example.local
+gateway: istio-system/main-gateway
+appLabel: llm-gateway
+
+oidc:
+  issuer: "https://accounts.google.com"
+  audiences: ["YOUR_OIDC_CLIENT_ID"]
+  jwksUri: "https://www.googleapis.com/oauth2/v3/certs"
+
+authz:
+  allowedDomains: ["yourcompany.com"]
+  allowedRoles: ["ai-users","sre"]
+
+canaryHeader: x-canary
+
+rateLimit:
+  reqPerMin: 60
+  rateKeyHeader: x-user-id

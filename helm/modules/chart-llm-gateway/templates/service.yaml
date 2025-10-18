@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels: { app: llm-gateway }
+spec:
+  selector: { app: llm-gateway }
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ .Values.service.port }}

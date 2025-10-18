@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retriever
+  labels: { app: retriever }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: retriever }
+  template:
+    metadata:
+      labels: { app: retriever }
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: retriever
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: OPENSEARCH_URL
+              value: {{ .Values.env.OPENSEARCH_URL | quote }}
+            - name: INDEX_NAME
+              value: {{ .Values.env.INDEX_NAME | quote }}
+            - name: ANN_FIELD
+              value: {{ .Values.env.ANN_FIELD | quote }}
+            - name: MIN_SCORE
+              value: {{ .Values.env.MIN_SCORE | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .Values.service.port }} }
+            initialDelaySeconds: 3
+            periodSeconds: 5

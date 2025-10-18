@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  labels: { app: llm-gateway }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: llm-gateway }
+  template:
+    metadata:
+      labels: { app: llm-gateway }
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: llm-gateway
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PROVIDER
+              value: {{ .Values.config.provider | quote }}
+            - name: REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            - name: OPENSEARCH_ENDPOINT
+              value: {{ .Values.opensearch.endpoint | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .Values.service.port }} }
+            initialDelaySeconds: 3
+            periodSeconds: 5

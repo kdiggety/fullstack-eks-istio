@@ -1,0 +1,18 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: llm-allow-internal
+  namespace: ml
+spec:
+  selector:
+    matchLabels: { app: {{ .Values.appLabel | quote }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            requestPrincipals: ["*"]
+      when:
+        - key: request.auth.claims[hd]
+          values: {{ .Values.authz.allowedDomains | toJson }}
+        - key: request.auth.claims[roles]
+          values: {{ .Values.authz.allowedRoles | toJson }}

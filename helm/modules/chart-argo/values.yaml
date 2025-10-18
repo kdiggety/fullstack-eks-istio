@@ -1,0 +1,11 @@
+argo-workflows:
+  server:
+    extraArgs: ["--auth-mode=sso"]
+    serviceType: ClusterIP
+  controller:
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+  workflow:
+    serviceAccount:
+      create: true
+      name: argo-workflow

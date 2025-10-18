@@ -8,16 +8,16 @@ appVersion: "0.1.0"
 dependencies:
   - name: api
     version: 0.1.2
-    repository: "file://../chart-api"
+    repository: "file://../modules/chart-api"
   - name: web
     version: 0.3.3
-    repository: "file://../chart-web"
+    repository: "file://../modules/chart-web"
   - name: istio
     version: 0.1.1
-    repository: "file://../chart-istio"
+    repository: "file://../modules/chart-istio"
   - name: secrets
     version: 0.1.2
-    repository: "file://../chart-secrets"
+    repository: "file://../modules/chart-secrets"
   - name: redis
     alias: redis
     version: 19.5.5

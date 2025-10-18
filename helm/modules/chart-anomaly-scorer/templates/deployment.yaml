@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-scorer
+  labels: { app: anomaly-scorer }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: anomaly-scorer }
+  template:
+    metadata:
+      labels: { app: anomaly-scorer }
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: anomaly-scorer
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .Values.service.port }} }
+            initialDelaySeconds: 3
+            periodSeconds: 5
