@@ -1,0 +1,11 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: anomaly-iforest
+  namespace: ml
+spec:
+  predictor:
+    model:
+      modelFormat: { name: sklearn }
+      storageUri: s3://ml-artifacts/anomaly/iforest/
+      runtime: kserve-sklearnserver

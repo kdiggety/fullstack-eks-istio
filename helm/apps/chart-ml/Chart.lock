@@ -1,0 +1,24 @@
+dependencies:
+- name: llm-gateway
+  repository: file://../../modules/chart-llm-gateway
+  version: 0.1.0
+- name: retriever
+  repository: file://../../modules/chart-retriever
+  version: 0.1.0
+- name: anomaly-scorer
+  repository: file://../../modules/chart-anomaly-scorer
+  version: 0.1.0
+- name: minio
+  repository: file://../../modules/chart-minio
+  version: 0.1.0
+- name: argo
+  repository: file://../../modules/chart-argo
+  version: 0.1.0
+- name: kserve-models
+  repository: file://../../modules/chart-kserve-models
+  version: 0.1.0
+- name: mesh-ml
+  repository: file://../../modules/chart-mesh-ml
+  version: 0.1.0
+digest: sha256:ff138c93f002193ae4b2bc828c88a069457cd1667453c2d8064ffeb722e35402
+generated: "2025-10-18T11:07:41.721949-07:00"

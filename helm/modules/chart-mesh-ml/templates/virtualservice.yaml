@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: llm-gateway
+  namespace: ml
+spec:
+  hosts: [{{ .Values.host | quote }}]
+  gateways: [{{ .Values.gateway | quote }}]
+  http:
+    - match:
+        - headers:
+            {{ .Values.canaryHeader }}:
+              exact: "true"
+      route:
+        - destination: { host: llm-gateway-canary.ml.svc.cluster.local, port: { number: 80 } }
+    - route:
+        - destination: { host: llm-gateway.ml.svc.cluster.local, port: { number: 80 } }

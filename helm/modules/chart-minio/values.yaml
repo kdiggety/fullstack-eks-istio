@@ -1,0 +1,12 @@
+minio:
+  mode: standalone
+  auth:
+    rootUser: ${MINIO_ROOT_USER}
+    rootPassword: ${MINIO_ROOT_PASSWORD}
+  defaultBuckets: "ml-artifacts,ml-datasets,ml-outputs"
+  persistence:
+    enabled: true
+    size: 100Gi
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: 1,    memory: 2Gi }

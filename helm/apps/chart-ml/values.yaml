@@ -1,0 +1,25 @@
+llmGateway:
+  enabled: true
+  image:
+    tag: latest
+retriever:
+  enabled: true
+  image:
+    tag: latest
+anomalyScorer:
+  enabled: true
+  image:
+    tag: latest
+minio:
+  enabled: true
+argo:
+  enabled: true
+kserveModels:
+  enabled: true
+meshMl:
+  enabled: true
+  host: llm.example.local
+  gateway: istio-system/main-gateway
+  authz:
+    allowedDomains: ["yourcompany.com"]
+    allowedRoles: ["ai-users","sre"]
