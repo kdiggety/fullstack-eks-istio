@@ -91,7 +91,7 @@ jobs:
           set -euo pipefail
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
-          pushd ./helm/chart >/dev/null
+          pushd ./helm/apps/chart-sample >/dev/null
           rm -rf charts
           helm dependency update .
           helm dependency build .
@@ -228,7 +228,7 @@ jobs:
           echo "  web: $WEB_IMAGE:$WEB_TAG (pullPolicy=$WEB_PULL)"
           echo "  api: $API_IMAGE:$API_TAG (pullPolicy=$API_PULL)"
 
-          helm upgrade --install fullstack "./helm/chart" \
+          helm upgrade --install fullstack "./helm/apps/chart-sample" \
             --namespace "$NAMESPACE" --create-namespace \
             --dependency-update \
             --set-string web.image.repository="$WEB_IMAGE" \
