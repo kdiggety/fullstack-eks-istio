@@ -42,7 +42,7 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
 
   deploy:
-    name: Deploy chart-ml (namespace: ml)
+    name: Deploy AI/ML
     needs: build
     if: ${{ needs.build.result == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, local-k8s, ubuntu-latest]
