@@ -1,0 +1,96 @@
+name: ci-ml
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'llm-gateway/**'
+      - 'retriever/**'
+      - 'anomaly-scorer/**'
+      - 'helm/apps/chart-ml/**'
+      - 'helm/modules/**'
+      - 'k8s/namespaces/ml-namespace.yaml'
+      - '.github/workflows/ci-ml.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-ml-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Push Images
+    runs-on: [self-hosted, local-k8s, ubuntu-latest]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        svc: [ llm-gateway, retriever, anomaly-scorer ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push ${{ matrix.svc }}
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.svc }}"
+          docker build -t "$IMAGE:${{ github.sha }}" "services/${{ matrix.svc }}"
+          docker push "$IMAGE:${{ github.sha }}"
+
+  deploy:
+    name: Deploy chart-ml (namespace: ml)
+    needs: build
+    if: ${{ needs.build.result == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: [self-hosted, local-k8s, ubuntu-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # kubectl/helm CLIs
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+
+      # KUBECONFIG: provide base64 kubeconfig via repo/org secret
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+
+      - name: Helm repos (for upstream module deps)
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm repo update
+
+      - name: Build Helm deps (apps/modules layout)
+        run: |
+          helm dependency build helm/modules/chart-minio
+          helm dependency build helm/modules/chart-argo
+          helm dependency build helm/apps/chart-ml
+
+      - name: Ensure namespace
+        run: kubectl apply -f k8s/namespaces/ml-namespace.yaml
+
+      - name: Helm upgrade/install (Option C via --set)
+        run: |
+          helm upgrade --install ml helm/apps/chart-ml -n ml \
+            --set meshMl.host="${{ secrets.ML_HOST }}" \
+            --set meshMl.gateway="istio-system/main-gateway" \
+            --set meshMl.authz.allowedDomains[0]="${{ secrets.ALLOWED_DOMAIN }}" \
+            --set meshMl.authz.allowedRoles[0]="ai-users" \
+            --set meshMl.authz.allowedRoles[1]="sre" \
+            --set meshMl.oidc.issuer="https://accounts.google.com" \
+            --set meshMl.oidc.audiences[0]="${{ secrets.OIDC_CLIENT_ID }}" \
+            --set meshMl.oidc.jwksUri="https://www.googleapis.com/oauth2/v3/certs" \
+            --set llmGateway.image.repository="ghcr.io/${{ github.repository }}/llm-gateway" \
+            --set retriever.image.repository="ghcr.io/${{ github.repository }}/retriever" \
+            --set anomalyScorer.image.repository="ghcr.io/${{ github.repository }}/anomaly-scorer" \
+            --set llmGateway.image.tag="${{ github.sha }}" \
+            --set retriever.image.tag="${{ github.sha }}" \
+            --set anomalyScorer.image.tag="${{ github.sha }}"
+

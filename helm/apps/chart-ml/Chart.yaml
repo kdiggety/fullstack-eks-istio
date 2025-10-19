@@ -6,35 +6,35 @@ dependencies:
   - name: llm-gateway
     alias: llmGateway
     version: 0.1.0
-    repository: "file://../modules/chart-llm-gateway"
+    repository: "file://../../modules/chart-llm-gateway"
     condition: llmGateway.enabled
   - name: retriever
     alias: retriever
     version: 0.1.0
-    repository: "file://../modules/chart-retriever"
+    repository: "file://../../modules/chart-retriever"
     condition: retriever.enabled
   - name: anomaly-scorer
     alias: anomalyScorer
     version: 0.1.0
-    repository: "file://../modules/chart-anomaly-scorer"
+    repository: "file://../../modules/chart-anomaly-scorer"
     condition: anomalyScorer.enabled
   - name: minio
     alias: minio
     version: 0.1.0
-    repository: "file://../modules/chart-minio"
+    repository: "file://../../modules/chart-minio"
     condition: minio.enabled
   - name: argo
     alias: argo
     version: 0.1.0
-    repository: "file://../modules/chart-argo"
+    repository: "file://../../modules/chart-argo"
     condition: argo.enabled
   - name: kserve-models
     alias: kserveModels
     version: 0.1.0
-    repository: "file://../modules/chart-kserve-models"
+    repository: "file://../../modules/chart-kserve-models"
     condition: kserveModels.enabled
   - name: mesh-ml
     alias: meshMl
     version: 0.1.0
-    repository: "file://../modules/chart-mesh-ml"
+    repository: "file://../../modules/chart-mesh-ml"
     condition: meshMl.enabled
