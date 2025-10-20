@@ -9,7 +9,7 @@ spec:
     - "{{ . }}"
 {{- end }}
   gateways:
-    - {{ .Values.virtualService.gatewayName }}
+    - {{ if .Values.gateway.namespace }}{{ printf "%s/%s" .Values.gateway.namespace .Values.virtualService.gatewayName }}{{ else }}{{ .Values.virtualService.gatewayName }}{{ end }}
   http:
     - match:
         - uri:
@@ -27,3 +27,4 @@ spec:
             host: {{ .Values.virtualService.routes.web.service }}.{{ default .Release.Namespace .Values.namespaceOverride }}.svc.cluster.local
             port:
               number: {{ .Values.virtualService.routes.web.port }}
+

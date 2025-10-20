@@ -123,6 +123,7 @@ web:
 istio:
   gateway:
     name: web-gateway
+    namespace: istio-system
     hosts: ["*"]
     port: 80
   virtualService:
