@@ -11,17 +11,30 @@ spec:
   gateways:
     - {{ if .Values.gateway.namespace }}{{ printf "%s/%s" .Values.gateway.namespace .Values.virtualService.gatewayName }}{{ else }}{{ .Values.virtualService.gatewayName }}{{ end }}
   http:
+    # 1) Make /api/health rock-solid (exact match)
     - match:
         - uri:
-            prefix: {{ .Values.virtualService.routes.api.prefix }}
+            exact: /api/health
       route:
         - destination:
             host: {{ .Values.virtualService.routes.api.service }}.{{ default .Release.Namespace .Values.namespaceOverride }}.svc.cluster.local
             port:
               number: {{ .Values.virtualService.routes.api.port }}
+
+    # 2) All other /api/* go to API
     - match:
         - uri:
-            prefix: {{ .Values.virtualService.routes.web.prefix }}
+            prefix: {{ .Values.virtualService.routes.api.prefix }}  # e.g. /api
+      route:
+        - destination:
+            host: {{ .Values.virtualService.routes.api.service }}.{{ default .Release.Namespace .Values.namespaceOverride }}.svc.cluster.local
+            port:
+              number: {{ .Values.virtualService.routes.api.port }}
+
+    # 3) Everything else goes to web
+    - match:
+        - uri:
+            prefix: {{ .Values.virtualService.routes.web.prefix }}  # e.g. /
       route:
         - destination:
             host: {{ .Values.virtualService.routes.web.service }}.{{ default .Release.Namespace .Values.namespaceOverride }}.svc.cluster.local

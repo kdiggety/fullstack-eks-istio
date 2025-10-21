@@ -2,16 +2,21 @@ apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: {{ .Values.gateway.name }}
-  namespace: {{ default .Release.Namespace .Values.namespaceOverride }}
+  namespace: {{ default "istio-system" .Values.gateway.namespace }}
 spec:
   selector:
+{{- if .Values.gateway.selector }}
+{{ toYaml .Values.gateway.selector | indent 4 }}
+{{- else }}
     istio: ingressgateway
+{{- end }}
   servers:
     - port:
-        number: {{ .Values.gateway.port }}
+        number: {{ .Values.gateway.port | default 80 }}
         name: http
         protocol: HTTP
       hosts:
 {{- range .Values.gateway.hosts }}
         - "{{ . }}"
 {{- end }}
+

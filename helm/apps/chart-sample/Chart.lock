@@ -1,18 +1,18 @@
 dependencies:
 - name: api
-  repository: file://../chart-api
+  repository: file://../../modules/chart-api
   version: 0.1.2
 - name: web
-  repository: file://../chart-web
+  repository: file://../../modules/chart-web
   version: 0.3.3
 - name: istio
-  repository: file://../chart-istio
-  version: 0.1.1
+  repository: file://../../modules/chart-istio
+  version: 0.1.2
 - name: secrets
-  repository: file://../chart-secrets
+  repository: file://../../modules/chart-secrets
   version: 0.1.2
 - name: redis
   repository: https://charts.bitnami.com/bitnami
   version: 19.5.5
-digest: sha256:97d95034061c0046e3effc04c80e029e1c811a3bd3ac84bdeb42195c2f177b36
-generated: "2025-10-12T23:41:53.571796-07:00"
+digest: sha256:292f78cf4b00e9d44b6429333d31c2eb805d785e15a909d9ee907141be17acf9
+generated: "2025-10-19T21:29:21.852181-07:00"
