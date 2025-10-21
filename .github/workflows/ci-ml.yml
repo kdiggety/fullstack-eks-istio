@@ -9,7 +9,7 @@ on:
       - 'anomaly-scorer/**'
       - 'helm/apps/chart-ml/**'
       - 'helm/modules/**'
-      - 'k8s/namespaces/ml-namespace.yaml'
+      - 'k8s/ml-namespace.yaml'
       - '.github/workflows/ci-ml.yml'
   workflow_dispatch: {}
 
@@ -109,7 +109,7 @@ jobs:
           helm dependency build helm/apps/chart-ml
 
       - name: Ensure namespace
-        run: kubectl apply -f k8s/namespaces/ml-namespace.yaml
+        run: kubectl apply -f k8s/ml-namespace.yaml
 
       - name: Helm upgrade/install (Option C via --set)
         run: |
