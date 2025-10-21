@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: Build & Push Images
-    runs-on: [self-hosted, local-k8s, ubuntu-latest]
+    runs-on: [self-hosted, local-k8s]
     permissions:
       contents: read
       packages: write
@@ -45,7 +45,7 @@ jobs:
     name: Deploy AI/ML
     needs: build
     if: ${{ needs.build.result == 'success' || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, local-k8s, ubuntu-latest]
+    runs-on: [self-hosted, local-k8s]
     permissions:
       contents: read
     steps:
