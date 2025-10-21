@@ -38,7 +38,7 @@ jobs:
       - name: Build & push ${{ matrix.svc }}
         run: |
           IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.svc }}"
-          docker build -t "$IMAGE:${{ github.sha }}" "services/${{ matrix.svc }}"
+          docker build -t "$IMAGE:${{ github.sha }}" "${{ matrix.svc }}"
           docker push "$IMAGE:${{ github.sha }}"
 
   deploy:
