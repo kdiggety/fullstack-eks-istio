@@ -11,7 +11,11 @@ on:
       - 'helm/modules/**'
       - 'k8s/namespaces/ml-namespace.yaml'
       - '.github/workflows/ci-ml.yml'
-  workflow_dispatch:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
 
 concurrency:
   group: ci-ml-${{ github.ref }}
@@ -21,47 +25,78 @@ jobs:
   build:
     name: Build & Push Images
     runs-on: [self-hosted, local-k8s]
-    permissions:
-      contents: read
-      packages: write
+    timeout-minutes: 60
     strategy:
       matrix:
         svc: [ llm-gateway, retriever, anomaly-scorer ]
+
+    env:
+      OWNER: ${{ github.repository_owner }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # QEMU + Buildx (same pattern as backend)
+      - name: Setup QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          use: true
+          driver: docker-container
+          buildkitd-flags: --debug
+
+      - name: Derive short tag
+        id: meta
+        shell: bash
+        run: echo "SHORT=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build & push ${{ matrix.svc }}
-        run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.svc }}"
-          docker build -t "$IMAGE:${{ github.sha }}" "${{ matrix.svc }}"
-          docker push "$IMAGE:${{ github.sha }}"
+
+      # Build contexts are root-level: ./llm-gateway, ./retriever, ./anomaly-scorer
+      - name: Build & Push ${{ matrix.svc }} (multi-arch)
+        id: build_push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.svc }}
+          push: true
+          provenance: false
+          platforms: linux/arm64,linux/amd64
+          tags: |
+            ghcr.io/${{ env.OWNER }}/${{ matrix.svc }}:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/${{ matrix.svc }}:${{ steps.meta.outputs.SHORT }}
+            ghcr.io/${{ env.OWNER }}/${{ matrix.svc }}:dev
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ matrix.svc }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ matrix.svc }}:buildcache,mode=max
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repository }}
 
   deploy:
     name: Deploy AI/ML
     needs: build
-    if: ${{ needs.build.result == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, local-k8s]
-    permissions:
-      contents: read
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      # kubectl/helm CLIs
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4
 
-      # KUBECONFIG: provide base64 kubeconfig via repo/org secret
       - name: Configure kubectl
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > "$HOME/.kube/config"
 
-      - name: Helm repos (for upstream module deps)
+      - name: Helm repos
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add argo https://argoproj.github.io/argo-helm
