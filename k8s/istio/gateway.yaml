@@ -2,14 +2,14 @@ apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: web-gateway
-  namespace: sample
+  namespace: istio-system
 spec:
   selector:
-    istio: ingressgateway
+    istio: ingress              # <-- matches your deploy label
   servers:
-  - port:
-      number: 80
-      name: http
-      protocol: HTTP
-    hosts:
-    - "*"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"

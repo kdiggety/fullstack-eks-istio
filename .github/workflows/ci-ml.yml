@@ -111,7 +111,7 @@ jobs:
       - name: Ensure namespace
         run: kubectl apply -f k8s/ml-namespace.yaml
 
-      - name: Helm upgrade/install (Option C via --set)
+      - name: Helm upgrade/install (Local-only providers)
         run: |
           helm upgrade --install ml helm/apps/chart-ml -n ml \
             --set meshMl.host="${{ secrets.ML_HOST }}" \
@@ -127,5 +127,19 @@ jobs:
             --set anomalyScorer.image.repository="ghcr.io/${{ github.repository_owner }}/anomaly-scorer" \
             --set llmGateway.image.tag="${{ github.sha }}" \
             --set retriever.image.tag="${{ github.sha }}" \
-            --set anomalyScorer.image.tag="${{ github.sha }}"
-
+            --set anomalyScorer.image.tag="${{ github.sha }}" \
+            \
+            # ---------- NEW: force local LLM via Ollama ----------
+            --set llmGateway.provider.type=ollama \
+            --set llmGateway.provider.baseUrl="http://ollama.ml.svc.cluster.local:11434" \
+            --set llmGateway.provider.model="llama3.1:8b" \
+            --set llmGateway.provider.disableAutoDetect=true \
+            \
+            # ---------- NEW: local embeddings + reranker ----------
+            --set retriever.embedder.provider=local \
+            --set retriever.embedder.model="all-MiniLM-L6-v2" \
+            --set reranker.provider=local \
+            --set reranker.model="cross-encoder/ms-marco-MiniLM-L-6-v2" \
+            \
+            # (optional) if your chart had KServe re-ranker, turn it off to stay local
+            --set kserveModels.reranker.enabled=false
