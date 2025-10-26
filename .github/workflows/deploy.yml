@@ -275,12 +275,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 >/tmp/pf.log 2>&1 &
+          kubectl -n istio-system port-forward svc/istio-ingressgateway 18080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
           sleep 3
           echo "== /api/health =="
-          curl -fsS "http://localhost:8080/api/health" | tee /tmp/health.json
+          curl -fsS "http://localhost:18080/api/health" | tee /tmp/health.json
           echo "== /runtime-config.js (first line) =="
-          curl -fsS "http://localhost:8080/runtime-config.js" | head -n 1 || true
+          curl -fsS "http://localhost:18080/runtime-config.js" | head -n 1 || true
           kill "$PF_PID" || true
 
