@@ -45,6 +45,19 @@ jobs:
           clean: true
           fetch-depth: 0
 
+      - name: Configure kubectl (use runner's ~/.kube/config)
+        shell: bash
+        run: |
+          set -euo pipefail
+          KCFG="$RUNNER_TEMP/kubeconfig"
+          test -f "$HOME/.kube/config" || { echo "::error ::$HOME/.kube/config not found for user $(whoami)"; exit 1; }
+          mkdir -p "$(dirname "$KCFG")"
+          cp "$HOME/.kube/config" "$KCFG"
+          chmod 600 "$KCFG"
+          echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
+          kubectl config current-context || true
+          kubectl cluster-info || true
+
       - name: Check prerequisites (gh, jq, buildx)
         shell: bash
         run: |
