@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ghcr-puller
+  namespace: {{ .Release.Namespace }}
+imagePullSecrets:
+  - name: {{ .Values.global.ghcrPullSecretName | default "ghcr-pull" }}

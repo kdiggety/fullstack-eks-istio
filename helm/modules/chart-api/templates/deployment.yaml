@@ -17,6 +17,15 @@ spec:
         app: api
         app.kubernetes.io/name: {{ .Chart.Name }}
     spec:
+      serviceAccountName: {{ .Values.serviceAccountName | default "default" }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range . }}
+        - name: {{ .name }}
+      {{- end }}
+      {{- end }}
+
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -24,6 +33,7 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.containerPort }}
+
           env:
             - name: oidcClientId
               valueFrom: { secretKeyRef: { name: api-env, key: oidcClientId } }
@@ -51,9 +61,11 @@ spec:
               port: {{ .Values.containerPort }}
             initialDelaySeconds: 10
             periodSeconds: 5
+
           livenessProbe:
             httpGet:
               path: {{ .Values.livenessPath }}
               port: {{ .Values.containerPort }}
             initialDelaySeconds: 30
             periodSeconds: 10
+

@@ -44,16 +44,9 @@ crash.log
 
 # Kubernetes / Helm
 .kube/
-helm/apps/chart-sample/charts/*/charts/
-helm/apps/chart-sample/charts/*/tmp/
-helm/apps/chart-sample/charts/*/Chart.lock
+helm/**/Chart.lock
+helm/**/*.tgz
 helm/apps/chart-sample/charts/*/values.override.yaml
-helm/apps/chart-sample/charts/*.tgz
-helm/apps/chart-ml/charts/*/charts/
-helm/apps/chart-ml/charts/*/tmp/
-helm/apps/chart-ml/charts/*/Chart.lock
-helm/apps/chart-ml/charts/*/values.override.yaml
-helm/apps/chart-ml/charts/*.tgz
 
 # Sealed Secrets
 pub.pem   # <-- fetched public cert for kubeseal, do NOT commit
