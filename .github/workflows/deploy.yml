@@ -45,19 +45,6 @@ jobs:
           clean: true
           fetch-depth: 0
 
-      - name: Configure kubectl (use runner's ~/.kube/config)
-        shell: bash
-        run: |
-          set -euo pipefail
-          KCFG="$RUNNER_TEMP/kubeconfig"
-          test -f "$HOME/.kube/config" || { echo "::error ::$HOME/.kube/config not found for user $(whoami)"; exit 1; }
-          mkdir -p "$(dirname "$KCFG")"
-          cp "$HOME/.kube/config" "$KCFG"
-          chmod 600 "$KCFG"
-          echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
-          kubectl config current-context || true
-          kubectl cluster-info || true
-
       - name: Check prerequisites (gh, jq, buildx)
         shell: bash
         run: |
@@ -71,8 +58,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          kubectl config current-context
+          # Ensure we are not overriding kubeconfig from env
+          unset KUBECONFIG || true
+
+          # Require local Docker Desktop k8s context
+          if ! kubectl config get-contexts -o name | grep -qx 'docker-desktop'; then
+            echo "::error ::docker-desktop context not found on runner. Start Docker Desktop (with Kubernetes) locally."
+            exit 1
+          fi
+          kubectl config use-context docker-desktop
+
+          # Give API a moment after restarts
+          for i in $(seq 1 30); do
+            if kubectl version --short >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          kubectl cluster-info
           kubectl get nodes -o wide
+
           kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
           kubectl label ns "$NAMESPACE" istio-injection=enabled --overwrite
 
@@ -288,12 +292,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          kubectl -n istio-system port-forward svc/istio-ingressgateway 18080:80 >/tmp/pf.log 2>&1 &
+          SVC=""
+          if kubectl -n istio-system get svc istio-ingress >/dev/null 2>&1; then
+            SVC="istio-ingress"
+          elif kubectl -n istio-system get svc istio-ingressgateway >/dev/null 2>&1; then
+            SVC="istio-ingressgateway"
+          else
+            echo "::error ::No Istio ingress service found in istio-system (tried istio-ingress, istio-ingressgateway)"
+            kubectl -n istio-system get svc || true
+            exit 1
+          fi
+          echo "Using ingress service: $SVC"
+
+          kubectl -n istio-system port-forward "svc/${SVC}" 18080:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
-          sleep 3
+
+          # Give PF a moment to come up
+          for i in $(seq 1 20); do
+            if curl -sSf -H "Host: anything.local" http://127.0.0.1:18080/ >/dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+
           echo "== /api/health =="
-          curl -fsS "http://localhost:18080/api/health" | tee /tmp/health.json
+          curl -fsS -H "Host: anything.local" "http://127.0.0.1:18080/api/health" | tee /tmp/health.json
           echo "== /runtime-config.js (first line) =="
-          curl -fsS "http://localhost:18080/runtime-config.js" | head -n 1 || true
+          curl -fsS -H "Host: anything.local" "http://127.0.0.1:18080/runtime-config.js" | head -n 1 || true
+
           kill "$PF_PID" || true
 
