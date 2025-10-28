@@ -132,8 +132,8 @@ jobs:
       - name: Helm upgrade/install (Local-only providers)
         run: |
           helm upgrade --install ml helm/apps/chart-ml -n ml \
-            --set meshMl.host="${{ secrets.ML_HOST }}" \
-            --set meshMl.gateway="istio-system/main-gateway" \
+            --set meshMl.host="*" \
+            --set meshMl.gateway="istio-system/web-gateway" \
             --set meshMl.authz.allowedDomains[0]="${{ secrets.ALLOWED_DOMAIN }}" \
             --set meshMl.authz.allowedRoles[0]="ai-users" \
             --set meshMl.authz.allowedRoles[1]="sre" \
@@ -159,6 +159,6 @@ jobs:
             --set reranker.provider=local \
             --set reranker.model="cross-encoder/ms-marco-MiniLM-L-6-v2" \
             \
-            # (optional) if your chart had KServe re-ranker, turn it off to stay local
-            --set kserveModels.reranker.enabled=false
+            # Disable KServe models unless CRDs are installed
+            --set kserveModels.enabled=false
 
