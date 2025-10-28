@@ -4,7 +4,7 @@ metadata:
   name: anomaly-scorer
   labels: { app: anomaly-scorer }
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount | default 1 }}
   selector:
     matchLabels: { app: anomaly-scorer }
   template:
@@ -13,14 +13,40 @@ spec:
       annotations:
         sidecar.istio.io/inject: "true"
     spec:
+      {{- if .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.imagePullSecrets }}
+        - name: {{ .name | quote }}
+      {{- end }}
+      {{- end }}
       containers:
         - name: anomaly-scorer
-          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $registry := .Values.global.image.registry | default "ghcr.io" }}
+          {{- $owner    := required "Set global.image.owner (e.g. --set-string global.image.owner=$OWNER)" .Values.global.image.owner }}
+          {{- $repo     := .Values.image.repository | default (printf "%s/%s/anomaly-scorer" $registry $owner) }}
+          {{- $tag      := .Values.image.tag | default .Values.global.image.tag | default "latest" }}
+          image: "{{ $repo }}:{{ $tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: {{ .Values.service.port | default 8080 }}
           readinessProbe:
-            httpGet: { path: /health, port: {{ .Values.service.port }} }
+            httpGet:
+              path: /health
+              port: http
             initialDelaySeconds: 3
             periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+

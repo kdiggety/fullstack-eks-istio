@@ -1,6 +1,10 @@
 image:
-  repository: ghcr.io/your-org/anomaly-scorer
+  repository: ghcr.io/kdiggety/anomaly-scorer
   tag: latest
   pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull
+
 service:
   port: 8080

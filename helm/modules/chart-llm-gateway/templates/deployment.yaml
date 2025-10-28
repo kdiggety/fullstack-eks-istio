@@ -4,7 +4,7 @@ metadata:
   name: llm-gateway
   labels: { app: llm-gateway }
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicaCount | default 2 }}
   selector:
     matchLabels: { app: llm-gateway }
   template:
@@ -13,10 +13,46 @@ spec:
       annotations:
         sidecar.istio.io/inject: "true"
     spec:
+      {{- if .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.imagePullSecrets }}
+        - name: {{ .name | quote }}
+      {{- end }}
+      {{- end }}
+
+      {{- $registry := .Values.global.image.registry | default "ghcr.io" }}
+      {{- $owner    := required "Set global.image.owner (e.g. --set-string global.image.owner=$OWNER)" .Values.global.image.owner }}
+      {{- $repo     := .Values.image.repository | default (printf "%s/%s/llm-gateway" $registry $owner) }}
+      {{- $tag      := .Values.image.tag | default .Values.global.image.tag | default "latest" }}
+
+      {{- $rp := .Values.readinessProbe | default (dict) }}
+      {{- $lp := .Values.livenessProbe  | default (dict)  }}
+      {{- $rpInit := 3 }}
+      {{- $rpPeriod := 5 }}
+      {{- $lpInit := 10 }}
+      {{- $lpPeriod := 10 }}
+      {{- if kindIs "map" $rp }}
+        {{- $rpInit = default 3 ($rp.initialDelaySeconds) }}
+        {{- $rpPeriod = default 5 ($rp.periodSeconds) }}
+      {{- else if kindIs "int" $rp }}
+        {{- $rpInit = $rp }}
+      {{- else if kindIs "float64" $rp }}
+        {{- $rpInit = ($rp | int) }}
+      {{- end }}
+      {{- if kindIs "map" $lp }}
+        {{- $lpInit = default 10 ($lp.initialDelaySeconds) }}
+        {{- $lpPeriod = default 10 ($lp.periodSeconds) }}
+      {{- else if kindIs "int" $lp }}
+        {{- $lpInit = $lp }}
+      {{- else if kindIs "float64" $lp }}
+        {{- $lpInit = ($lp | int) }}
+      {{- end }}
+
       containers:
         - name: llm-gateway
-          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ $repo }}:{{ $tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+
           env:
             - name: PROVIDER
               value: {{ .Values.config.provider | quote }}
@@ -24,10 +60,27 @@ spec:
               value: {{ .Values.redis.url | quote }}
             - name: OPENSEARCH_ENDPOINT
               value: {{ .Values.opensearch.endpoint | quote }}
+
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: {{ .Values.service.port | default 8080 }}
+
           readinessProbe:
-            httpGet: { path: /health, port: {{ .Values.service.port }} }
-            initialDelaySeconds: 3
-            periodSeconds: 5
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ $rpInit }}
+            periodSeconds:       {{ $rpPeriod }}
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ $lpInit }}
+            periodSeconds:       {{ $lpPeriod }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+

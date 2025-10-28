@@ -1,3 +1,9 @@
+global:
+  image:
+    registry: ghcr.io
+    owner: "kdiggety"
+    tag: ""
+
 llmGateway:
   enabled: true
   image:
@@ -18,8 +24,9 @@ kserveModels:
   enabled: true
 meshMl:
   enabled: true
-  host: llm.example.local
-  gateway: istio-system/main-gateway
+  host: "*"
+  gateway: istio-system/web-gateway
   authz:
     allowedDomains: ["yourcompany.com"]
     allowedRoles: ["ai-users","sre"]
+

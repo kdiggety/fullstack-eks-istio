@@ -111,6 +111,20 @@ jobs:
       - name: Ensure namespace
         run: kubectl apply -f k8s/ml-namespace.yaml
 
+      - name: Ensure GHCR imagePullSecret on namespace SA
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        env:
+          GHCR_USER: ${{ github.repository_owner }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          kubectl -n ml create secret docker-registry ghcr-pull \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USER" \
+            --docker-password="$GHCR_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n ml patch serviceaccount default --type merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
+
       - name: Helm upgrade/install (Local-only providers)
         run: |
           helm upgrade --install ml helm/apps/chart-ml -n ml \
@@ -143,3 +157,4 @@ jobs:
             \
             # (optional) if your chart had KServe re-ranker, turn it off to stay local
             --set kserveModels.reranker.enabled=false
+
