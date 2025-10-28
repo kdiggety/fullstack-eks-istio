@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/your-org/retriever
+  repository: ghcr.io/kdiggety/retriever
   tag: latest
   pullPolicy: IfNotPresent
 service:

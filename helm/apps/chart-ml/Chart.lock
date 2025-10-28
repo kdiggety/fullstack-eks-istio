@@ -7,7 +7,7 @@ dependencies:
   version: 0.1.0
 - name: anomaly-scorer
   repository: file://../../modules/chart-anomaly-scorer
-  version: 0.1.0
+  version: 0.1.2
 - name: minio
   repository: file://../../modules/chart-minio
   version: 0.1.0
@@ -20,5 +20,5 @@ dependencies:
 - name: mesh-ml
   repository: file://../../modules/chart-mesh-ml
   version: 0.1.0
-digest: sha256:ff138c93f002193ae4b2bc828c88a069457cd1667453c2d8064ffeb722e35402
-generated: "2025-10-18T11:07:41.721949-07:00"
+digest: sha256:825aa0ac53245e9213f6bf3b80afd1262bf101f7b3c4294a8c528414d7f9d85b
+generated: "2025-10-26T23:17:43.231697-07:00"
