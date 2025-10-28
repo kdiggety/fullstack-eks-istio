@@ -85,6 +85,9 @@ jobs:
     needs: build
     runs-on: [self-hosted, local-k8s]
     timeout-minutes: 30
+    env:
+      GHCR_USER: ${{ github.repository_owner }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -112,10 +115,7 @@ jobs:
         run: kubectl apply -f k8s/ml-namespace.yaml
 
       - name: Ensure GHCR imagePullSecret on namespace SA
-        if: ${{ secrets.GHCR_TOKEN != '' }}
-        env:
-          GHCR_USER: ${{ github.repository_owner }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        if: ${{ env.GHCR_TOKEN != '' }}
         run: |
           kubectl -n ml create secret docker-registry ghcr-pull \
             --docker-server=ghcr.io \
