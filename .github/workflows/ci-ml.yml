@@ -94,10 +94,14 @@ jobs:
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4
 
-      - name: Configure kubectl
+      # Use the runner's local kube context (docker-desktop)
+      - name: Use local kube context (docker-desktop)
         run: |
-          mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > "$HOME/.kube/config"
+          set -euo pipefail
+          unset KUBECONFIG
+          kubectl config use-context docker-desktop
+          kubectl cluster-info
+          kubectl get nodes -o wide
 
       - name: Helm repos
         run: |
