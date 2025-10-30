@@ -13,40 +13,87 @@ spec:
       annotations:
         sidecar.istio.io/inject: "true"
     spec:
-      {{- if .Values.image.imagePullSecrets }}
+      # Pod-level security context (override via values if needed)
+      securityContext:
+        runAsNonRoot: {{ default true  .Values.podSecurityContext.runAsNonRoot }}
+        runAsUser:    {{ default 10001 .Values.podSecurityContext.runAsUser }}
+        runAsGroup:   {{ default 10001 .Values.podSecurityContext.runAsGroup }}
+        fsGroup:      {{ default 10001 .Values.podSecurityContext.fsGroup }}
+
+      # Optional imagePullSecrets (renders nothing if empty)
+      {{- $ips := .Values.image.imagePullSecrets | default (list) }}
+      {{- if gt (len $ips) 0 }}
       imagePullSecrets:
-      {{- range .Values.image.imagePullSecrets }}
+      {{- range $ips }}
         - name: {{ .name | quote }}
       {{- end }}
       {{- end }}
+
+      # SAFE probe defaults (works for nil/map/scalar values)
+      {{- $rp := .Values.readinessProbe | default (dict) }}
+      {{- $lp := .Values.livenessProbe  | default (dict) }}
+      {{- $rpInit := 3 }}
+      {{- $rpPeriod := 5 }}
+      {{- $lpInit := 10 }}
+      {{- $lpPeriod := 10 }}
+      {{- if kindIs "map" $rp }}
+        {{- $rpInit = default 3 ($rp.initialDelaySeconds) }}
+        {{- $rpPeriod = default 5 ($rp.periodSeconds) }}
+      {{- else if kindIs "int" $rp }}
+        {{- $rpInit = $rp }}
+      {{- else if kindIs "float64" $rp }}
+        {{- $rpInit = ($rp | int) }}
+      {{- end }}
+      {{- if kindIs "map" $lp }}
+        {{- $lpInit = default 10 ($lp.initialDelaySeconds) }}
+        {{- $lpPeriod = default 10 ($lp.periodSeconds) }}
+      {{- else if kindIs "int" $lp }}
+        {{- $lpInit = $lp }}
+      {{- else if kindIs "float64" $lp }}
+        {{- $lpInit = ($lp | int) }}
+      {{- end }}
+
       containers:
         - name: anomaly-scorer
-          {{- $registry := .Values.global.image.registry | default "ghcr.io" }}
+          {{- $registry := default "ghcr.io" .Values.global.image.registry }}
           {{- $owner    := required "Set global.image.owner (e.g. --set-string global.image.owner=$OWNER)" .Values.global.image.owner }}
-          {{- $repo     := .Values.image.repository | default (printf "%s/%s/anomaly-scorer" $registry $owner) }}
-          {{- $tag      := .Values.image.tag | default .Values.global.image.tag | default "latest" }}
+          {{- $repo     := default (printf "%s/%s/anomaly-scorer" $registry $owner) .Values.image.repository }}
+          {{- $tag      := default (default "latest" .Values.global.image.tag) .Values.image.tag }}
           image: "{{ $repo }}:{{ $tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+
           ports:
             - name: http
               containerPort: {{ .Values.service.port | default 8080 }}
+
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: {{ $rpInit }}
+            periodSeconds:       {{ $rpPeriod }}
+
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          {{- with .Values.resources }}
+            initialDelaySeconds: {{ $lpInit }}
+            periodSeconds:       {{ $lpPeriod }}
+
+          {{- if kindIs "map" .Values.resources }}
           resources:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- else }}
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
           {{- end }}
+
+          # Container-level hardening
           securityContext:
-            runAsNonRoot: true
             allowPrivilegeEscalation: false
 
