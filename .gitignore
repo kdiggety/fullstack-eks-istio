@@ -44,8 +44,7 @@ crash.log
 
 # Kubernetes / Helm
 .kube/
-helm/**/Chart.lock
-helm/**/*.tgz
+helm/**/charts/
 helm/apps/chart-sample/charts/*/values.override.yaml
 
 # Sealed Secrets
