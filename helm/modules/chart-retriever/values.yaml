@@ -2,13 +2,23 @@ image:
   repository: ghcr.io/kdiggety/retriever
   tag: latest
   pullPolicy: IfNotPresent
+
 service:
   port: 8080
+
+replicaCount: 1
+  resources:
+    requests: { cpu: "25m", memory: "64Mi" }
+    limits:   { cpu: "500m", memory: "256Mi" }
+  podAnnotations:
+    sidecar.istio.io/proxyCPU: "25m"
+    sidecar.istio.io/proxyMemory: "64Mi"
+    sidecar.istio.io/proxyCPULimit: "250m"
+    sidecar.istio.io/proxyMemoryLimit: "128Mi"
+    sidecar.istio.io/holdApplicationUntilProxyStarts: "true"
+
 env:
   OPENSEARCH_URL: http://opensearch.ml.svc.cluster.local:9200
   INDEX_NAME: ml-docs
   ANN_FIELD: embedding
   MIN_SCORE: "0.1"
-resources:
-  requests: { cpu: 200m, memory: 256Mi }
-  limits:   { cpu: 1,    memory: 1Gi }

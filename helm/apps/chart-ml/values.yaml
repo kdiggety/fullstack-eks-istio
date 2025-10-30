@@ -21,7 +21,7 @@ minio:
 argo:
   enabled: true
 kserveModels:
-  enabled: true
+  enabled: false
 meshMl:
   enabled: true
   host: "*"
