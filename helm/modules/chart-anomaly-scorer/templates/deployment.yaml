@@ -55,10 +55,25 @@ spec:
 
       containers:
         - name: anomaly-scorer
-          {{- $registry := default "ghcr.io" .Values.global.image.registry }}
-          {{- $owner    := required "Set global.image.owner (e.g. --set-string global.image.owner=$OWNER)" .Values.global.image.owner }}
-          {{- $repo     := default (printf "%s/%s/anomaly-scorer" $registry $owner) .Values.image.repository }}
-          {{- $tag      := default (default "latest" .Values.global.image.tag) .Values.image.tag }}
+          # anomaly-scorer/templates/deployment.yaml (replace your image block)
+          {{- $g     := (default (dict) .Values.global) -}}
+          {{- $gimg  := (get $g "image" | default (dict)) -}}
+          {{- $reg   := (get $gimg "registry" | default "ghcr.io") -}}
+          {{- $owner := (get $gimg "owner"    | default "") -}}
+          
+          {{- $repo := (default "" .Values.image.repository) -}}
+          {{- if not $repo }}
+            {{- /* Only require owner when we need to synthesize a repo */ -}}
+            {{- $owner = required "Set global.image.owner (e.g. --set-string global.image.owner=$OWNER) or provide image.repository" $owner -}}
+            {{- $repo = printf "%s/%s/anomaly-scorer" $reg $owner -}}
+          {{- else }}
+            {{- /* If a repo is provided, optionally prefix with registry (when not already prefixed) */ -}}
+            {{- if and $reg (not (hasPrefix (printf "%s/" $reg) (printf "%s/" $repo))) -}}
+              {{- $repo = printf "%s/%s" $reg $repo -}}
+            {{- end -}}
+          {{- end -}}
+          
+          {{- $tag := (default (get $gimg "tag" | default "latest") .Values.image.tag) -}}
           image: "{{ $repo }}:{{ $tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
 
