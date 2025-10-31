@@ -37,7 +37,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # QEMU + Buildx (same pattern as backend)
       - name: Setup QEMU (multi-arch)
         uses: docker/setup-qemu-action@v3
 
@@ -61,7 +60,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build contexts are root-level: ./llm-gateway, ./retriever, ./anomaly-scorer
       - name: Build & Push ${{ matrix.svc }} (multi-arch)
         id: build_push
         uses: docker/build-push-action@v6
@@ -94,9 +92,8 @@ jobs:
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4
         # with:
-        #   version: v3.14.4  # (optional) ensure --set-json support (Helm >= 3.12)
+        #   version: v3.14.4  # ensure --set-json support (Helm >= 3.12)
 
-      # Use the runner's local kube context (docker-desktop)
       - name: Use local kube context (docker-desktop)
         run: |
           set -euo pipefail
