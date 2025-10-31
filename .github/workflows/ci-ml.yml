@@ -134,8 +134,8 @@ jobs:
             --reset-values \
             --set meshMl.host="*" \
             --set meshMl.gateway="istio-system/web-gateway" \
-            --set-json meshMl.oidc=null \
-            --set-json meshMl.authz=null \
+            --set-json meshMl.oidc={} \
+            --set-json meshMl.authz={} \
             \
             --set llm-gateway.image.repository="ghcr.io/${{ github.repository_owner }}/llm-gateway" \
             --set retriever.image.repository="ghcr.io/${{ github.repository_owner }}/retriever" \
