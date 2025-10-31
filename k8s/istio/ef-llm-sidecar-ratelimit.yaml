@@ -1,18 +1,18 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: llm-per-user-ratelimit
-  namespace: istio-system
+  name: llm-sidecar-ratelimit
+  namespace: ml
 spec:
-  # Only match the ingress gateway (via the explicit label you set above)
   workloadSelector:
     labels:
-      ratelimit: "enabled"
+      app: llm-gateway
   configPatches:
   - applyTo: HTTP_FILTER
     match:
-      context: GATEWAY
+      context: SIDECAR_INBOUND
       listener:
+        portNumber: 8080
         filterChain:
           filter:
             name: envoy.filters.network.http_connection_manager
@@ -24,9 +24,14 @@ spec:
         name: envoy.filters.http.local_ratelimit
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
-          stat_prefix: http_local_rate_limiter
+          stat_prefix: llm_rl
           token_bucket:
-            max_tokens: 100
-            tokens_per_fill: 100
-            fill_interval: 1s
+            max_tokens: 60
+            tokens_per_fill:
+              value: 60
+            fill_interval: 60s
+          filter_enabled:
+            default_value: { numerator: 100 }
+          filter_enforced:
+            default_value: { numerator: 100 }
 
