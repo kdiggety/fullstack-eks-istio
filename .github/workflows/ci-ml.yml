@@ -94,7 +94,7 @@ jobs:
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4
         # with:
-        #   version: v3.14.4  # (optional) ensure --set-json support
+        #   version: v3.14.4  # (optional) ensure --set-json support (Helm >= 3.12)
 
       # Use the runner's local kube context (docker-desktop)
       - name: Use local kube context (docker-desktop)
@@ -134,6 +134,7 @@ jobs:
       - name: Helm upgrade/install (Local-only providers, no mesh OIDC/AuthZ)
         run: |
           helm upgrade --install ml helm/apps/chart-ml -n ml \
+            --reset-values \
             --set meshMl.host="*" \
             --set meshMl.gateway="istio-system/web-gateway" \
             --set-json meshMl.oidc=null \
