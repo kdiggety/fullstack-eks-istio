@@ -93,6 +93,8 @@ jobs:
 
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4
+        # with:
+        #   version: v3.14.4  # (optional) ensure --set-json support
 
       # Use the runner's local kube context (docker-desktop)
       - name: Use local kube context (docker-desktop)
@@ -129,31 +131,28 @@ jobs:
           kubectl -n ml patch serviceaccount default --type merge \
             -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
 
-      - name: Helm upgrade/install (Local-only providers)
+      - name: Helm upgrade/install (Local-only providers, no mesh OIDC/AuthZ)
         run: |
           helm upgrade --install ml helm/apps/chart-ml -n ml \
             --set meshMl.host="*" \
             --set meshMl.gateway="istio-system/web-gateway" \
-            --set meshMl.authz.allowedDomains[0]="${{ secrets.ALLOWED_DOMAIN }}" \
-            --set meshMl.authz.allowedRoles[0]="ai-users" \
-            --set meshMl.authz.allowedRoles[1]="sre" \
-            --set meshMl.oidc.issuer="https://accounts.google.com" \
-            --set meshMl.oidc.audiences[0]="${{ secrets.OIDC_CLIENT_ID }}" \
-            --set meshMl.oidc.jwksUri="https://www.googleapis.com/oauth2/v3/certs" \
-            --set llmGateway.image.repository="ghcr.io/${{ github.repository_owner }}/llm-gateway" \
-            --set retriever.image.repository="ghcr.io/${{ github.repository_owner }}/retriever" \
-            --set anomalyScorer.image.repository="ghcr.io/${{ github.repository_owner }}/anomaly-scorer" \
-            --set llmGateway.image.tag="${{ github.sha }}" \
-            --set retriever.image.tag="${{ github.sha }}" \
-            --set anomalyScorer.image.tag="${{ github.sha }}" \
+            --set-json meshMl.oidc=null \
+            --set-json meshMl.authz=null \
             \
-            # ---------- NEW: force local LLM via Ollama ----------
+            --set llm-gateway.image.repository="ghcr.io/${{ github.repository_owner }}/llm-gateway" \
+            --set retriever.image.repository="ghcr.io/${{ github.repository_owner }}/retriever" \
+            --set anomaly-scorer.image.repository="ghcr.io/${{ github.repository_owner }}/anomaly-scorer" \
+            --set llm-gateway.image.tag="${{ github.sha }}" \
+            --set retriever.image.tag="${{ github.sha }}" \
+            --set anomaly-scorer.image.tag="${{ github.sha }}" \
+            \
+            # ---------- Local LLM via Ollama ----------
             --set llmGateway.provider.type=ollama \
             --set llmGateway.provider.baseUrl="http://ollama.ml.svc.cluster.local:11434" \
             --set llmGateway.provider.model="llama3.1:8b" \
             --set llmGateway.provider.disableAutoDetect=true \
             \
-            # ---------- NEW: local embeddings + reranker ----------
+            # ---------- Local embeddings + reranker ----------
             --set retriever.embedder.provider=local \
             --set retriever.embedder.model="all-MiniLM-L6-v2" \
             --set reranker.provider=local \
